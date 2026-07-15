@@ -19,6 +19,76 @@ enum ApiRequest {
         return try await NetworkProvider.request(.addAppSub(url: url, id: UUID().uuidString))
     }
 
+    /// Maximum accepted size for a pasted subscription payload (mirrors the backend cap).
+    private static let maxRawSubBytes = 512 * 1024
+
+    /// URL schemes allowed inside a pasted subscription (apps' url/repo/icon/script).
+    /// A pasted subscription has no verifiable origin, so we reject anything but plain
+    /// https to keep `javascript:`/`data:`/`file:` payloads out of the executable paths.
+    private static let allowedEmbeddedSchemes: Set<String> = ["https"]
+
+    /// Adds a subscription from raw JSON pasted by the user (no remote URL).
+    /// Validation is intentionally stricter than the tolerant decode used when reading
+    /// data back from the trusted backend, because this input is untrusted.
+    static func addAppSubRaw(json: String, name: String? = nil) async throws -> BoxDataResp {
+        let id = try validatePastedSubscription(json: json)
+        return try await NetworkProvider.request(.addAppSubRaw(json: json, id: id, name: name))
+    }
+
+    /// Validates a pasted subscription and returns the subscription `id` to use.
+    /// Throws `RequestError.statusFail` with a user-facing message on any problem.
+    @discardableResult
+    private static func validatePastedSubscription(json: String) throws -> String {
+        let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw RequestError.statusFail(code: -1, message: "订阅内容为空")
+        }
+        guard trimmed.utf8.count <= maxRawSubBytes else {
+            throw RequestError.statusFail(code: -1, message: "订阅内容过大")
+        }
+
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: Data(trimmed.utf8))
+        } catch {
+            throw RequestError.statusFail(code: -1, message: "订阅内容不是合法 JSON")
+        }
+        guard let dict = object as? [String: Any] else {
+            throw RequestError.statusFail(code: -1, message: "订阅内容不是合法 JSON 对象")
+        }
+
+        guard let id = (dict["id"] as? String), !id.isEmpty else {
+            throw RequestError.statusFail(code: -1, message: "订阅缺少 id 字段")
+        }
+        guard let apps = dict["apps"] as? [[String: Any]] else {
+            throw RequestError.statusFail(code: -1, message: "订阅 apps 字段格式错误")
+        }
+
+        try validateEmbeddedURLs(inApps: apps)
+        return id
+    }
+
+    /// Rejects any embedded URL whose scheme is not whitelisted (defends the
+    /// `runScript`/open-repo paths against `javascript:`/`data:`/`file:` injection).
+    private static func validateEmbeddedURLs(inApps apps: [[String: Any]]) throws {
+        let urlKeys = ["repo", "icon", "script"]
+        for app in apps {
+            for key in urlKeys {
+                guard let value = app[key] as? String,
+                      !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                try assertAllowedScheme(value)
+            }
+        }
+    }
+
+    private static func assertAllowedScheme(_ urlString: String) throws {
+        let scheme = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines))?
+            .scheme?.lowercased()
+        guard let scheme, allowedEmbeddedSchemes.contains(scheme) else {
+            throw RequestError.statusFail(code: -1, message: "订阅包含不受支持的链接: \(urlString)")
+        }
+    }
+
     private static func validateSubscriptionSource(url: String) async throws {
         guard let requestURL = URL(string: url) else {
             throw RequestError.statusFail(code: -1, message: "订阅地址无效")

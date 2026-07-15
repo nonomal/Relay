@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 import SDWebImage
 
 struct SubcribeView: View {
@@ -15,6 +16,10 @@ struct SubcribeView: View {
     @State private var isDragging: Bool = false
     @State private var showAddAlert: Bool = false
     @State private var addUrlInput: String = ""
+    @State private var showAddOptions: Bool = false
+    @State private var showPasteSheet: Bool = false
+    @State private var pasteJSONInput: String = ""
+    @State private var showPasteFilePicker: Bool = false
     @State private var selectedSubURL: String? = nil
     @State private var isNavActive: Bool = false
 
@@ -77,6 +82,29 @@ struct SubcribeView: View {
         } message: {
             Text("请输入订阅链接地址")
         }
+        .confirmationDialog("添加订阅", isPresented: $showAddOptions, titleVisibility: .visible) {
+            Button("输入订阅地址") {
+                addUrlInput = ""
+                showAddAlert = true
+            }
+            Button("粘贴 JSON 内容") {
+                pasteJSONInput = ""
+                showPasteSheet = true
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .sheet(isPresented: $showPasteSheet) {
+            PasteSubscriptionSheet(
+                jsonText: $pasteJSONInput,
+                showFilePicker: $showPasteFilePicker,
+                onConfirm: {
+                    let json = pasteJSONInput
+                    showPasteSheet = false
+                    Task { await boxModel.addAppSubRaw(json: json) }
+                },
+                onCancel: { showPasteSheet = false }
+            )
+        }
         .onReceive(boxModel.$cachedAppSubSummaries) { summaries in
             if !isDragging {
                 items = summaries
@@ -127,8 +155,7 @@ struct SubcribeView: View {
                         .foregroundColor(.accent)
                 }
                 Button {
-                    addUrlInput = ""
-                    showAddAlert = true
+                    showAddOptions = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 17, weight: .medium))
@@ -163,8 +190,7 @@ struct SubcribeView: View {
                     .multilineTextAlignment(.center)
             }
             Button {
-                addUrlInput = ""
-                showAddAlert = true
+                showAddOptions = true
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
@@ -691,6 +717,97 @@ final class SubCardCell: UICollectionViewCell {
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+// MARK: - Paste JSON Subscription Sheet
+
+/// Lets the user add a subscription by pasting raw JSON (or importing a JSON file)
+/// instead of a remote URL. Because the content has no verifiable origin, the sheet
+/// shows a prominent trust warning; the backend keys such subs under `manual://`.
+private struct PasteSubscriptionSheet: View {
+    @EnvironmentObject var toastManager: ToastManager
+
+    @Binding var jsonText: String
+    @Binding var showFilePicker: Bool
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        neboxNavigationContainer {
+            Form {
+                Section {
+                    Label {
+                        Text("粘贴的内容来源无法验证。请仅添加你信任的订阅，恶意脚本可能读取或篡改你的代理配置。")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                    }
+                }
+
+                Section(footer: Text("支持 JSON 格式的订阅数据")) {
+                    Button(action: pasteFromClipboard) {
+                        Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
+                    }
+                    Button { showFilePicker = true } label: {
+                        Label("从文件导入", systemImage: "doc")
+                    }
+                }
+
+                if !jsonText.isEmpty {
+                    Section(header: Text("内容预览")) {
+                        Text(jsonText.prefix(500) + (jsonText.count > 500 ? "..." : ""))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(10)
+                    }
+                }
+            }
+            .navigationTitle("粘贴订阅")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("添加", action: onConfirm)
+                        .disabled(jsonText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .fileImporter(
+                isPresented: $showFilePicker,
+                allowedContentTypes: [.json, .plainText],
+                allowsMultipleSelection: false
+            ) { result in
+                handleFileImport(result)
+            }
+        }
+    }
+
+    private func pasteFromClipboard() {
+        guard let str = UIPasteboard.general.string, !str.isEmpty else {
+            toastManager.showToast(message: "剪贴板为空")
+            return
+        }
+        jsonText = str
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        if case .success(let urls) = result, let url = urls.first {
+            guard url.startAccessingSecurityScopedResource() else {
+                toastManager.showToast(message: "无法访问文件")
+                return
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+            if let data = try? Data(contentsOf: url),
+               let str = String(data: data, encoding: .utf8), !str.isEmpty {
+                jsonText = str
+            } else {
+                toastManager.showToast(message: "文件读取失败")
+            }
+        }
     }
 }
 

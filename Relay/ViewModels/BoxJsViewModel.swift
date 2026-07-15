@@ -221,6 +221,13 @@ class BoxJsViewModel: ObservableObject {
         await perform("添加订阅") { try await ApiRequest.addAppSub(url: url) }
     }
 
+    /// Adds a subscription from raw JSON pasted by the user (no remote URL).
+    /// Local validation lives in `ApiRequest.addAppSubRaw`; the backend keys the
+    /// resulting sub by its own `id` (no remote URL is fetched).
+    func addAppSubRaw(json: String, name: String? = nil) async {
+        await perform("添加订阅") { try await ApiRequest.addAppSubRaw(json: json, name: name) }
+    }
+
     func deleteAppSub(url: String) async {
         await perform("删除订阅") { try await NetworkProvider.request(.deleteAppSub(url: url)) }
     }

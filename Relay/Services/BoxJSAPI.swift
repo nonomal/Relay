@@ -20,6 +20,7 @@ enum BoxJSAPI {
     case reloadAppSub(url: String)
     case reloadAllAppSub
     case addAppSub(url: String, id: String)
+    case addAppSubRaw(json: String, id: String, name: String?)
     case deleteAppSub(url: String)
     case runScript(url: String)
     case runTxtScript(script: String)
@@ -60,6 +61,8 @@ extension BoxJSAPI: TargetType {
             return "/api/reloadAppSub"
         case .addAppSub:
             return "/api/addAppSub"
+        case .addAppSubRaw:
+            return "/api/addAppSubRaw"
         case .deleteAppSub:
             return "/api/deleteAppSub"
         case .runScript, .runTxtScript:
@@ -110,6 +113,11 @@ extension BoxJSAPI: TargetType {
 
         case .addAppSub(let url, let id):
             return .requestParameters(parameters: ["url": url, "enable": true, "id": id], encoding: JSONEncoding.default)
+
+        case .addAppSubRaw(let json, let id, let name):
+            var params: [String: Any] = ["json": json, "id": id]
+            if let name, !name.isEmpty { params["name"] = name }
+            return .requestParameters(parameters: params, encoding: JSONEncoding.default)
 
         case .deleteAppSub(let url):
             return .requestParameters(parameters: ["url": url], encoding: JSONEncoding.default)
