@@ -72,6 +72,7 @@
 		E35500012FA0000000E352F0 /* Highlighter in Frameworks */ = {isa = PBXBuildFile; productRef = E35500022FA0000000E352F0 /* Highlighter */; };
 		F10000010000000000000001 /* LogManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000010000000000000002 /* LogManager.swift */; };
 		F10000020000000000000001 /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000002 /* LogViewerView.swift */; };
+		F1FEED0100000000000000A1 /* FeedbackMail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FEED0100000000000000A2 /* FeedbackMail.swift */; };
 		F10000030000000000000001 /* BackupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000030000000000000002 /* BackupDetailView.swift */; };
 		F10000040000000000000001 /* VersionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000040000000000000002 /* VersionHistoryView.swift */; };
 		F10000050000000000000001 /* AcknowledgementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000050000000000000002 /* AcknowledgementsView.swift */; };
@@ -120,6 +121,7 @@
 		E2E9E26A2C4A7E5B00836E4B /* ViewModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModifier.swift; sourceTree = "<group>"; };
 		F10000010000000000000002 /* LogManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogManager.swift; sourceTree = "<group>"; };
 		F10000020000000000000002 /* LogViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerView.swift; sourceTree = "<group>"; };
+		F1FEED0100000000000000A2 /* FeedbackMail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackMail.swift; sourceTree = "<group>"; };
 		F10000030000000000000002 /* BackupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDetailView.swift; sourceTree = "<group>"; };
 		F10000040000000000000002 /* VersionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionHistoryView.swift; sourceTree = "<group>"; };
 		F10000050000000000000002 /* AcknowledgementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcknowledgementsView.swift; sourceTree = "<group>"; };
@@ -305,6 +307,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00000100000001000000A2 /* ProfileView.swift */,
+				F1FEED0100000000000000A2 /* FeedbackMail.swift */,
 				F10000020000000000000002 /* LogViewerView.swift */,
 				AA00000100000004000000A2 /* PreferencesView.swift */,
 				F10000030000000000000002 /* BackupDetailView.swift */,
@@ -516,6 +519,7 @@
 				E21043252C89951C00347C43 /* RadioButtonGroup.swift in Sources */,
 				AA00000100000001000000A1 /* ProfileView.swift in Sources */,
 				F10000020000000000000001 /* LogViewerView.swift in Sources */,
+				F1FEED0100000000000000A1 /* FeedbackMail.swift in Sources */,
 				AA00000100000002000000A1 /* DataViewerView.swift in Sources */,
 				AA00000100000003000000A1 /* SearchView.swift in Sources */,
 				AA00000100000006000000A1 /* SearchTabView.swift in Sources */,

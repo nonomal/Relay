@@ -10,6 +10,7 @@ import SDWebImageSwiftUI
 import UniformTypeIdentifiers
 import AnyCodable
 import PhotosUI
+import MessageUI
 
 // MARK: - Profile Main View
 
@@ -560,6 +561,9 @@ private struct ProfileQuickActions: View {
 // MARK: - Other Section
 
 private struct ProfileOtherSection: View {
+    @EnvironmentObject var toastManager: ToastManager
+    @State private var showMail = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("其他")
@@ -568,6 +572,12 @@ private struct ProfileOtherSection: View {
                 .padding(.horizontal, 4)
 
             VStack(spacing: 0) {
+                Button(action: openFeedback) {
+                    ActionRow(icon: "envelope.fill", title: "意见反馈", subtitle: "邮件直达开发者（自动附上日志）", iconColor: .blue)
+                }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 52)
+
                 Link(destination: URL(string: "https://ifdian.net/a/gidoensenku")!) {
                     ActionRow(icon: "heart.fill", title: "赞助开发者", subtitle: "请开发者喝杯咖啡", iconColor: .red)
                 }
@@ -599,6 +609,29 @@ private struct ProfileOtherSection: View {
             }
             .background(Color.bgCard)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .sheet(isPresented: $showMail) {
+            MailComposeView(
+                recipient: FeedbackMail.recipient,
+                subject: FeedbackMail.subject,
+                body: FeedbackMail.body,
+                logData: LogManager.shared.exportLogData(),
+                onFinish: { showMail = false }
+            )
+            .ignoresSafeArea()
+        }
+    }
+
+    /// 意见反馈入口：优先应用内原生撰写页（可附日志），无 Apple Mail 账户回退 mailto:，
+    /// 再不行则复制邮箱到剪贴板并提示。
+    private func openFeedback() {
+        if MFMailComposeViewController.canSendMail() {
+            showMail = true
+        } else if let url = FeedbackMail.mailtoURL, UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        } else {
+            UIPasteboard.general.string = FeedbackMail.recipient
+            toastManager.showToast(message: "已复制反馈邮箱：\(FeedbackMail.recipient)")
         }
     }
 }
@@ -1054,6 +1087,7 @@ struct ApiSettingsView: View {
                     Text("重置后将返回初始配置页")
                 }
             }
+            .neboxDismissKeyboardOnScroll()
             .navigationTitle("API 设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

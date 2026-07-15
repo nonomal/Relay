@@ -94,6 +94,7 @@ struct SearchView: View {
                     }
                 }
                 .listStyle(.plain)
+                .neboxDismissKeyboardOnScroll()
             }
             .navigationBarHidden(true)
             .onAppear {

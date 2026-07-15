@@ -325,6 +325,21 @@ func adaptiveBottomInset() -> CGFloat {
 // MARK: - iOS 26 Tab bar (Liquid Glass)
 
 extension View {
+    /// Dismiss the keyboard when the user scrolls the container, using the
+    /// system-native `scrollDismissesKeyboard` API (iOS 16+). Replaces manual
+    /// tap-gesture / `resignFirstResponder` focus workarounds on scroll views.
+    /// No-ops on iOS 15, where the API is unavailable.
+    @ViewBuilder
+    func neboxDismissKeyboardOnScroll() -> some View {
+        if #available(iOS 16.0, *) {
+            self.scrollDismissesKeyboard(.immediately)
+        } else {
+            self
+        }
+    }
+}
+
+extension View {
     /// Per-tab toolbar chrome for native `TabView` on iOS 26+ (attach to each tab’s root, not `TabView`).
     @ViewBuilder
     func neboxLiquidGlassTabBarChrome() -> some View {

@@ -136,10 +136,7 @@ struct DataViewerView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }
-        }
-        .onTapGesture {
-            isKeyFieldFocused = false
-            isEditorFocused = false
+            .neboxDismissKeyboardOnScroll()
         }
         .navigationTitle("数据查看器")
         .navigationBarTitleDisplayMode(.inline)
