@@ -25,6 +25,7 @@ struct SubDetailView: View {
     @State private var items: [AppModel] = []
     @State private var selectedApp: AppModel?
     @State private var isNavigationActive: Bool = false
+    @Namespace private var appNavigationNamespace
 
     /// Derived from boxData on appear / change — only the header fields, no apps array.
     @State private var subName: String = ""
@@ -59,6 +60,8 @@ struct SubDetailView: View {
                     }
                 } else if isListMode {
                     appListView
+                } else if #available(iOS 18.0, *) {
+                    appGridView
                 } else {
                     CollectionViewWrapper(
                         items: $items,
@@ -88,6 +91,10 @@ struct SubDetailView: View {
         .background(Color.gradientBottom.ignoresSafeArea(edges: .bottom))
         .neboxNavigationDestination(isPresented: $isNavigationActive) {
             AppDetailView(app: selectedApp)
+                .neboxZoomNavigationTransition(
+                    sourceID: selectedApp?.id,
+                    in: appNavigationNamespace
+                )
         }
         .onAppear { loadSubDetail() }
         .onDisappear {
@@ -183,6 +190,7 @@ struct SubDetailView: View {
             LazyVStack(spacing: 10) {
                 ForEach(items) { app in
                     appCard(app)
+                        .neboxMatchedTransitionSource(id: app.id, in: appNavigationNamespace)
                         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .onTapGesture {
                             selectedApp = app
@@ -210,6 +218,76 @@ struct SubDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, adaptiveBottomInset())
+        }
+    }
+
+    @available(iOS 18.0, *)
+    private var appGridView: some View {
+        ScrollView {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4),
+                spacing: 24
+            ) {
+                ForEach(items) { app in
+                    appGridItem(app)
+                        .neboxMatchedTransitionSource(id: app.id, in: appNavigationNamespace)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedApp = app
+                            isNavigationActive = true
+                        }
+                        .contextMenu {
+                            let isFav = favAppIds.contains(app.id)
+                            Button {
+                                toggleFavorite(app)
+                            } label: {
+                                Label(
+                                    isFav ? "取消收藏" : "加入收藏",
+                                    systemImage: isFav ? "heart.slash" : "heart.fill"
+                                )
+                            }
+                        }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
+            .padding(.bottom, adaptiveBottomInset())
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private func appGridItem(_ app: AppModel) -> some View {
+        VStack(spacing: 6) {
+            ZStack(alignment: .bottomTrailing) {
+                AppIconView(app: app, size: 60)
+                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+
+                if favAppIds.contains(app.id) {
+                    Image(systemName: "star.circle.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.yellow, .white)
+                        .offset(x: 4, y: 4)
+                }
+            }
+
+            Text(app.name)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundColor(.textSecondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+        }
+        .frame(height: 90, alignment: .top)
+    }
+
+    private func toggleFavorite(_ app: AppModel) {
+        Task { @MainActor in
+            let ids = boxModel.boxData.usercfgs?.favapps ?? []
+            if ids.contains(app.id) {
+                boxModel.updateData(path: "usercfgs.favapps", data: ids.filter { $0 != app.id })
+            } else {
+                boxModel.updateData(path: "usercfgs.favapps", data: ids + [app.id])
+            }
         }
     }
 

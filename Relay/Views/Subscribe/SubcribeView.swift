@@ -83,14 +83,8 @@ struct SubcribeView: View {
             Text("请输入订阅链接地址")
         }
         .confirmationDialog("添加订阅", isPresented: $showAddOptions, titleVisibility: .visible) {
-            Button("输入订阅地址") {
-                addUrlInput = ""
-                showAddAlert = true
-            }
-            Button("粘贴 JSON 内容") {
-                pasteJSONInput = ""
-                showPasteSheet = true
-            }
+            Button("输入订阅地址", action: beginURLSubscription)
+            Button("粘贴 JSON 内容", action: beginPastedSubscription)
             Button("取消", role: .cancel) {}
         }
         .sheet(isPresented: $showPasteSheet) {
@@ -154,8 +148,13 @@ struct SubcribeView: View {
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.accent)
                 }
-                Button {
-                    showAddOptions = true
+                Menu {
+                    Button(action: beginURLSubscription) {
+                        Label("输入订阅地址", systemImage: "link")
+                    }
+                    Button(action: beginPastedSubscription) {
+                        Label("粘贴 JSON 内容", systemImage: "doc.on.clipboard")
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 17, weight: .medium))
@@ -165,6 +164,16 @@ struct SubcribeView: View {
         }
         .frame(height: 56)
         .padding(.horizontal, 20)
+    }
+
+    private func beginURLSubscription() {
+        addUrlInput = ""
+        showAddAlert = true
+    }
+
+    private func beginPastedSubscription() {
+        pasteJSONInput = ""
+        showPasteSheet = true
     }
 
     // MARK: - Empty State

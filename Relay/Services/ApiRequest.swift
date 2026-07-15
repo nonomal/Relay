@@ -6,6 +6,7 @@
 //
 
 import AnyCodable
+import CryptoKit
 import Foundation
 
 /// High-level API helpers that contain business logic (parameter assembly, encoding).
@@ -22,7 +23,7 @@ enum ApiRequest {
     /// Maximum accepted size for a pasted subscription payload (mirrors the backend cap).
     private static let maxRawSubBytes = 512 * 1024
 
-    /// URL schemes allowed inside a pasted subscription (apps' url/repo/icon/script).
+    /// URL schemes allowed in subscription/app repos, icons, and executable scripts.
     /// A pasted subscription has no verifiable origin, so we reject anything but plain
     /// https to keep `javascript:`/`data:`/`file:` payloads out of the executable paths.
     private static let allowedEmbeddedSchemes: Set<String> = ["https"]
@@ -31,11 +32,12 @@ enum ApiRequest {
     /// Validation is intentionally stricter than the tolerant decode used when reading
     /// data back from the trusted backend, because this input is untrusted.
     static func addAppSubRaw(json: String, name: String? = nil) async throws -> BoxDataResp {
-        let id = try validatePastedSubscription(json: json)
-        return try await NetworkProvider.request(.addAppSubRaw(json: json, id: id, name: name))
+        let storageID = try validatePastedSubscription(json: json)
+        return try await NetworkProvider.request(.addAppSubRaw(json: json, id: storageID, name: name))
     }
 
-    /// Validates a pasted subscription and returns the subscription `id` to use.
+    /// Validates a pasted subscription and returns a namespaced cache key that cannot
+    /// accidentally be treated as a refreshable remote URL by the backend.
     /// Throws `RequestError.statusFail` with a user-facing message on any problem.
     @discardableResult
     private static func validatePastedSubscription(json: String) throws -> String {
@@ -60,33 +62,75 @@ enum ApiRequest {
         guard let id = (dict["id"] as? String), !id.isEmpty else {
             throw RequestError.statusFail(code: -1, message: "订阅缺少 id 字段")
         }
-        guard let apps = dict["apps"] as? [[String: Any]] else {
+        guard dict["apps"] is [Any] else {
             throw RequestError.statusFail(code: -1, message: "订阅 apps 字段格式错误")
         }
 
-        try validateEmbeddedURLs(inApps: apps)
-        return id
+        let normalizedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedID == id else {
+            throw RequestError.statusFail(code: -1, message: "订阅 id 不能包含首尾空格")
+        }
+        guard URLComponents(string: normalizedID)?.scheme == nil else {
+            throw RequestError.statusFail(code: -1, message: "订阅 id 不能是链接")
+        }
+
+        let subscription: AppSubCache
+        do {
+            subscription = try JSONDecoder().decode(AppSubCache.self, from: Data(trimmed.utf8))
+        } catch {
+            throw RequestError.statusFail(
+                code: -1,
+                message: "订阅字段不完整或格式错误（应用至少需要 id、name 和 icons）"
+            )
+        }
+        guard subscription.apps.allSatisfy({ !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            throw RequestError.statusFail(code: -1, message: "订阅包含缺少 id 的应用")
+        }
+
+        try validateEmbeddedURLs(in: subscription)
+        return manualStorageID(for: normalizedID)
     }
 
     /// Rejects any embedded URL whose scheme is not whitelisted (defends the
     /// `runScript`/open-repo paths against `javascript:`/`data:`/`file:` injection).
-    private static func validateEmbeddedURLs(inApps apps: [[String: Any]]) throws {
-        let urlKeys = ["repo", "icon", "script"]
-        for app in apps {
-            for key in urlKeys {
-                guard let value = app[key] as? String,
-                      !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                try assertAllowedScheme(value)
+    private static func validateEmbeddedURLs(in subscription: AppSubCache) throws {
+        try assertAllowedSchemeIfPresent(subscription.repo)
+        try assertAllowedSchemeIfPresent(subscription.icon)
+
+        for app in subscription.apps {
+            try assertAllowedSchemeIfPresent(app.repo)
+            try assertAllowedSchemeIfPresent(app.icon)
+            try assertAllowedSchemeIfPresent(app.script)
+            for icon in app.icons {
+                try assertAllowedSchemeIfPresent(icon)
+            }
+            for script in app.scripts ?? [] {
+                try assertAllowedSchemeIfPresent(script.script)
             }
         }
+    }
+
+    private static func assertAllowedSchemeIfPresent(_ urlString: String?) throws {
+        guard let urlString,
+              !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        try assertAllowedScheme(urlString)
     }
 
     private static func assertAllowedScheme(_ urlString: String) throws {
         let scheme = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines))?
             .scheme?.lowercased()
         guard let scheme, allowedEmbeddedSchemes.contains(scheme) else {
-            throw RequestError.statusFail(code: -1, message: "订阅包含不受支持的链接: \(urlString)")
+            let preview = urlString.count > 160 ? "\(urlString.prefix(160))…" : urlString
+            throw RequestError.statusFail(code: -1, message: "订阅包含不受支持的链接: \(preview)")
         }
+    }
+
+    /// Stable per subscription id, so importing the same manual subscription updates it
+    /// instead of creating duplicates. The non-http scheme also makes refresh a no-op.
+    private static func manualStorageID(for subscriptionID: String) -> String {
+        let digest = SHA256.hash(data: Data(subscriptionID.utf8))
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        return "manual://\(hex)"
     }
 
     private static func validateSubscriptionSource(url: String) async throws {

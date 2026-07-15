@@ -423,6 +423,7 @@ struct FormSettingRow: View {
                     TextEditor(text: binding(for: index))
                         .font(.body)
                         .frame(minHeight: 100, maxHeight: 200)
+                        .neboxDismissKeyboardOnScroll()
                         .modifier(HideScrollContentBackground())
                         .padding(8)
                         .background(Color(.tertiarySystemFill))
@@ -550,75 +551,74 @@ struct AppDetailView: View {
 
     var body: some View {
         if let app = app {
-            Form {
-                // MARK: App Info
-                Section {
-                    AppHeaderView(app: app)
-                }
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-
-                if app.hasDescription {
+            withAppBottomActions(
+                Form {
+                    // MARK: App Info
                     Section {
-                        AppDescCardView(app: app)
+                        AppHeaderView(app: app)
                     }
-                }
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
 
-                // MARK: Scripts
-                if let scripts = app.scripts, !scripts.isEmpty {
-                    Section {
-                        AppScriptsView(scripts: scripts) { resp in
-                            scriptResult = resp
-                            showScriptResult = true
+                    if app.hasDescription {
+                        Section {
+                            AppDescCardView(app: app)
                         }
-                    } header: {
-                        Text("应用脚本")
                     }
-                }
 
-                // MARK: Settings
-                let settings = app.settings ?? []
-                if !settings.isEmpty {
-                    Section {
-                        AppSettingsView(settings: bindingForSettings())
-                    } header: {
-                        Text("应用设置")
-                    }
-                }
-
-                // MARK: Session Data
-                if app.keys != nil && !cachedAppDataInfo.datas.isEmpty {
-                    appSessionDataSection(app: app)
-                }
-
-                // MARK: Sessions
-                if !cachedAppDataInfo.sessions.isEmpty {
-                    Section {
-                        ForEach(Array(cachedAppDataInfo.sessions.enumerated()), id: \.element.id) { index, session in
-                            sessionRow(session: session, index: index, app: app)
+                    // MARK: Scripts
+                    if let scripts = app.scripts, !scripts.isEmpty {
+                        Section {
+                            AppScriptsView(scripts: scripts) { resp in
+                                scriptResult = resp
+                                showScriptResult = true
+                            }
+                        } header: {
+                            Text("应用脚本")
                         }
-                    } header: {
-                        Text("历史会话")
+                    }
+
+                    // MARK: Settings
+                    let settings = app.settings ?? []
+                    if !settings.isEmpty {
+                        Section {
+                            AppSettingsView(settings: bindingForSettings())
+                        } header: {
+                            Text("应用设置")
+                        }
+                    }
+
+                    // MARK: Session Data
+                    if app.keys != nil && !cachedAppDataInfo.datas.isEmpty {
+                        appSessionDataSection(app: app)
+                    }
+
+                    // MARK: Sessions
+                    if !cachedAppDataInfo.sessions.isEmpty {
+                        Section {
+                            ForEach(Array(cachedAppDataInfo.sessions.enumerated()), id: \.element.id) { index, session in
+                                sessionRow(session: session, index: index, app: app)
+                            }
+                        } header: {
+                            Text("历史会话")
+                        }
                     }
                 }
-            }
-            .modifier(ScrollDismissKeyboardModifier())
-            .modifier(GroupedFormStyle())
-            .navigationTitle(app.name)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        toggleFav(app)
-                    } label: {
-                        Image(systemName: isFavorite(app) ? "heart.fill" : "heart")
-                            .foregroundColor(isFavorite(app) ? .red : .secondary)
-                            .font(.system(size: 17))
+                .neboxDismissKeyboardOnScroll()
+                .modifier(GroupedFormStyle())
+                .navigationTitle(app.name)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            toggleFav(app)
+                        } label: {
+                            Image(systemName: isFavorite(app) ? "heart.fill" : "heart")
+                                .foregroundColor(isFavorite(app) ? .red : .secondary)
+                                .font(.system(size: 17))
+                        }
                     }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                appBottomActionBar(app: app)
-                    .offset(y: keyboardHeight)
-            }
+                },
+                app: app
+            )
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
                 if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
                     keyboardHeight = frame.height
@@ -644,6 +644,31 @@ struct AppDetailView: View {
             }
             .onReceive(boxModel.$boxData) { _ in
                 refreshCachedAppDataInfo()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func withAppBottomActions<Content: View>(_ content: Content, app: AppModel) -> some View {
+        if #available(iOS 26.0, *) {
+            content.toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    appOverflowMenu(app: app)
+                }
+
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+
+                ToolbarItemGroup(placement: .bottomBar) {
+                    appSaveToolbarButton(app: app)
+                    if let script = app.script, !script.isEmpty {
+                        appRunToolbarButton(script: script)
+                    }
+                }
+            }
+        } else {
+            content.safeAreaInset(edge: .bottom) {
+                appLegacyBottomActionBar(app: app)
+                    .offset(y: keyboardHeight)
             }
         }
     }
@@ -886,7 +911,99 @@ struct AppDetailView: View {
         )
     }
 
-    private func appBottomActionBar(app: AppModel) -> some View {
+    @available(iOS 26.0, *)
+    private func appOverflowMenu(app: AppModel) -> some View {
+        Menu {
+            Button {
+                showImportSession = true
+            } label: {
+                Label("导入会话", systemImage: "square.and.arrow.down")
+            }
+
+            Button(action: copyAppDatas) {
+                Label("复制数据", systemImage: "doc.on.clipboard")
+            }
+
+            Button {
+                if let session = cachedAppDataInfo.curSession {
+                    copySession(session)
+                }
+            } label: {
+                Label("复制会话", systemImage: "doc.on.doc")
+            }
+            .disabled(cachedAppDataInfo.curSession == nil)
+
+            Divider()
+
+            Button(role: .destructive) {
+                Task {
+                    boxModel.clearAppDatas(app: app)
+                    toastManager.showToast(message: "已清除")
+                }
+            } label: {
+                Label("清除数据", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .accessibilityLabel("更多操作")
+    }
+
+    @available(iOS 26.0, *)
+    private func appSaveToolbarButton(app: AppModel) -> some View {
+        Button {
+            Task { @MainActor in
+                guard !isSavingSettings else { return }
+                isSavingSettings = true
+                saveCurrentAppSettings(app: app)
+                isSavingSettings = false
+            }
+        } label: {
+            if isSavingSettings {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                    .frame(width: 22, height: 22, alignment: .center)
+            } else {
+                Label("保存", systemImage: "square.and.arrow.down")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 22, height: 22, alignment: .center)
+            }
+        }
+        .frame(minWidth: 32, minHeight: 32, alignment: .center)
+        .disabled(isSavingSettings)
+        .accessibilityLabel("保存")
+    }
+
+    @available(iOS 26.0, *)
+    private func appRunToolbarButton(script: String) -> some View {
+        Button {
+            Task {
+                guard !isRunningScript else { return }
+                isRunningScript = true
+                await runAppScript(script)
+                isRunningScript = false
+            }
+        } label: {
+            if isRunningScript {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                    .frame(width: 22, height: 22, alignment: .center)
+            } else {
+                Label("运行", systemImage: "play.fill")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 22, height: 22, alignment: .center)
+            }
+        }
+        .frame(minWidth: 32, minHeight: 32, alignment: .center)
+        .disabled(isRunningScript)
+        .accessibilityLabel("运行")
+    }
+
+    private func appLegacyBottomActionBar(app: AppModel) -> some View {
         let hasRun = app.script?.isEmpty == false
 
         return VStack(spacing: 0) {

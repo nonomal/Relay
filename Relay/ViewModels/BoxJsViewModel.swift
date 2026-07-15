@@ -60,13 +60,16 @@ class BoxJsViewModel: ObservableObject {
     // MARK: - Generic Error Handling
 
     @MainActor
-    private func perform(_ hint: String, _ operation: () async throws -> BoxDataResp) async {
+    private func perform(_ hint: String,
+                         showsErrorDetails: Bool = false,
+                         _ operation: () async throws -> BoxDataResp) async {
         do {
             let boxdata = try await operation()
             self.boxData = boxdata
         } catch {
             let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            toastManager?.showToast(message: "\(hint)失败")
+            let toast = showsErrorDetails ? "\(hint)失败：\(msg)" : "\(hint)失败"
+            toastManager?.showToast(message: toast)
             appLog(.error, category: .viewModel, "[\(hint)] \(msg)")
         }
     }
@@ -222,10 +225,12 @@ class BoxJsViewModel: ObservableObject {
     }
 
     /// Adds a subscription from raw JSON pasted by the user (no remote URL).
-    /// Local validation lives in `ApiRequest.addAppSubRaw`; the backend keys the
-    /// resulting sub by its own `id` (no remote URL is fetched).
+    /// Local validation lives in `ApiRequest.addAppSubRaw`; the backend stores it under
+    /// a stable `manual://` cache id, so refresh never treats it as a remote URL.
     func addAppSubRaw(json: String, name: String? = nil) async {
-        await perform("添加订阅") { try await ApiRequest.addAppSubRaw(json: json, name: name) }
+        await perform("添加订阅", showsErrorDetails: true) {
+            try await ApiRequest.addAppSubRaw(json: json, name: name)
+        }
     }
 
     func deleteAppSub(url: String) async {

@@ -193,13 +193,30 @@ extension View {
 
     @ViewBuilder
     func neboxHideTabBar() -> some View {
-        if #available(iOS 16.0, *) {
+        if #available(iOS 26.0, *) {
             self
                 .toolbar(.hidden, for: .tabBar)
-                .preference(key: NEBoxHideTabBarPreferenceKey.self, value: true)
         } else {
             self
                 .preference(key: NEBoxHideTabBarPreferenceKey.self, value: true)
+        }
+    }
+
+    @ViewBuilder
+    func neboxMatchedTransitionSource<ID: Hashable>(id: ID, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            self.matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func neboxZoomNavigationTransition<ID: Hashable>(sourceID: ID?, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *), let sourceID {
+            self.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            self
         }
     }
 }
