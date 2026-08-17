@@ -193,7 +193,7 @@ private struct BackupHeroArea: View {
         VStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.accentBlueLight)
+                    .fill(Color.accentLight)
                     .frame(width: 72, height: 72)
                 Image(systemName: "icloud.fill")
                     .font(.system(size: 36))
@@ -269,8 +269,8 @@ private struct TagsRow: View {
                         .font(.system(size: 11, weight: .semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.accentBlue.opacity(0.1))
-                        .foregroundColor(.accentBlue)
+                        .background(Color.accent.opacity(0.1))
+                        .foregroundColor(.accent)
                         .cornerRadius(6)
                 }
             }
@@ -345,14 +345,14 @@ private struct DetailActionRow: View {
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.accentBlue.opacity(0.1))
+                        .fill(Color.accent.opacity(0.1))
                         .frame(width: 36, height: 36)
                     if isLoading {
                         ProgressView()
                     } else {
                         Image(systemName: icon)
                             .font(.system(size: 16))
-                            .foregroundColor(.accentBlue)
+                            .foregroundColor(.accent)
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {

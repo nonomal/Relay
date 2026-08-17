@@ -55,6 +55,10 @@ struct RelayTabBar: View {
     let items: [RelayTabItem]
     @Binding var selection: Int
 
+    /// `searchButton` 读 `NEBoxTabBarPalette.selected`，那只是取值那一刻的
+    /// 快照、不带订阅；观察调色板才能让主题色变化带动重绘。
+    @ObservedObject private var palette = ThemePalette.shared
+
     /// Called when the *already selected* tab is tapped again. Telegram uses this to
     /// scroll the current screen to the top rather than re-selecting.
     var onReselect: ((Int) -> Void)? = nil
@@ -163,6 +167,9 @@ private struct RelayTabPressStyle: ButtonStyle {
 private struct RelayTabButton: View {
     let item: RelayTabItem
     let isSelected: Bool
+
+    /// 同上：不订阅的话未重算的 tab 会停在旧主题色上。
+    @ObservedObject private var palette = ThemePalette.shared
 
     var body: some View {
         // 全部项都用选中色：壁纸模式下非选中的灰蓝压在玻璃上几乎读不出来。

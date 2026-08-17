@@ -26,8 +26,16 @@ struct NavigationBarTitlePresentation {
 
     /// 标题文字。
     var title: String
-    /// 返回箭头颜色 + 标题文字色。沉浸页通常是白（压在深色头图上）；白底页传 .textPrimary。
+    /// 标题文字色。沉浸页通常是白（压在深色头图上）；白底页传 .textPrimary。
+    ///
+    /// 注意这**不再**兼管返回箭头——箭头见 `arrowTint`。两者曾是同一个字段，
+    /// 但白底页标题要 `.textPrimary`（正文色），箭头按 iOS 惯例应该是强调色，
+    /// 合用一个值就必然有一边不对。
     var tint: Color = .white
+    /// 返回箭头颜色。`nil` = 跟随主题色（`Color.accent`）。
+    ///
+    /// 沉浸页压在深色头图上要显式传白；白底页留 nil 走强调色。
+    var arrowTint: Color? = nil
     /// 左侧按钮组宽度，用于标题居中避让——nil 表示无按钮，走默认安全边距。
     /// 默认 44（系统返回箭头）。
     var leadingButtonWidth: CGFloat? = 44
@@ -45,8 +53,8 @@ struct NavigationBarTitlePresentation {
     var mode: Mode = .revealOnScroll
     /// iOS 26 分支对导航栏强制的配色（决定系统返回箭头深浅）：深色沉浸页 .dark
     /// （白箭头压深色头图）；**白底页必须传 nil**（不强制、跟随环境 = 深色箭头，
-    /// 传 .dark 会白箭头压白底看不见）。<26 的箭头颜色走 NavigationBarTintBridge(tint)，
-    /// 与本参数无关。
+    /// 传 .dark 会白箭头压白底看不见）。<26 的箭头颜色走
+    /// NavigationBarTintBridge(arrowTint)，与本参数无关。
     var barColorScheme: ColorScheme? = .dark
     /// `.revealOnScroll` 在 iOS 26 以下的落点：默认自绘 overlay（沉浸页——栏背景
     /// 已隐藏，overlay 不会被盖，17-25 已验证）；**白底页必须传 true 改走系统
@@ -150,7 +158,7 @@ private struct NavigationBarTitleModifier: ViewModifier {
                         content
                     } else {
                         // 返回箭头颜色沿用命令式 bridge（17-25 已验证，见其文档注释）。
-                        content.background(NavigationBarTintBridge(color: UIColor(presentation.tint)))
+                        content.background(NavigationBarTintBridge(color: presentation.arrowTint.map { UIColor($0) }))
                     }
                 }
                 .navigationBarTitleDisplayMode(.inline)
@@ -194,7 +202,7 @@ private struct NavigationBarTitleModifier: ViewModifier {
                     .navigationBarTitleDisplayMode(.inline)
                     // 同 26+ principal：隐藏稳态靠 residentTitle 清空
                     .toolbar(content: animatedPrincipalToolbar)
-                    .background(NavigationBarTintBridge(color: UIColor(presentation.tint)))
+                    .background(NavigationBarTintBridge(color: presentation.arrowTint.map { UIColor($0) }))
             } else {
                 content
                     .overlay(alignment: .top) {
@@ -206,7 +214,7 @@ private struct NavigationBarTitleModifier: ViewModifier {
                             title
                         }
                     }
-                    .background(NavigationBarTintBridge(color: UIColor(presentation.tint)))
+                    .background(NavigationBarTintBridge(color: presentation.arrowTint.map { UIColor($0) }))
             }
         }
         // 单参数 onChange：双参数那版是 iOS 17+，Relay 还要支持 15。
@@ -431,14 +439,28 @@ struct NavigationBarContentArea<Content: View>: View {
 /// 个病根：titleView 内部实现是私有的，我们从来没有真正的确定性。标题现在改走
 /// NavigationBarContent 纯 SwiftUI 自绘。
 struct NavigationBarTintBridge: UIViewControllerRepresentable {
-    let color: UIColor
+    /// `nil` = 跟随主题色。传具体色则强制（沉浸页的白箭头）。
+    var color: UIColor?
+
+    /// 观察调色板：主题色是运行时可变的，而 `Color.accent` 是不带订阅的快照读。
+    /// 不观察的话，色板在本页建好之后才落定时 SwiftUI 没有依赖可失效，
+    /// `updateUIViewController` 不会再跑，箭头就停在第一次拿到的颜色上。
+    @ObservedObject private var palette = ThemePalette.shared
+
+    init(color: UIColor? = nil) {
+        self.color = color
+    }
+
+    private var resolved: UIColor {
+        color ?? UIColor(palette.colors?.primary ?? .accentBlue)
+    }
 
     func makeUIViewController(context: Context) -> UIViewController {
         UIViewController()
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        uiViewController.navigationController?.navigationBar.tintColor = color
+        uiViewController.navigationController?.navigationBar.tintColor = resolved
     }
 }
 

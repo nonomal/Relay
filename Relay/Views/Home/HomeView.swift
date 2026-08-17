@@ -180,7 +180,7 @@ struct HomeView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(Color.accent)
-                    .foregroundColor(.white)
+                    .foregroundColor(.onAccent)
                     .cornerRadius(8)
             }
             Spacer()

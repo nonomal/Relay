@@ -160,7 +160,7 @@ struct SubcribeView: View {
                     Text("添加订阅")
                         .font(.system(size: 15, weight: .semibold))
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.onAccent)
                 .padding(.horizontal, 24)
                 .frame(height: 48)
                 .background(Color.accent)

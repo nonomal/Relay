@@ -249,7 +249,9 @@ struct ContentView: View {
                     SearchTabView(searchText: $searchText)
                 }
             }
-            .tint(NEBoxTabBarPalette.selected)
+            // tint 不在这里写：`relayThemedAccent()` 已经在根上按主题色设了，
+            // 这里再读一次 `Color.accent` 反而拿的是没有订阅的快照，主题色变了
+            // 不会重绘（选中色会停在旧颜色上）。
             .tabBarMinimizeBehavior(.onScrollDown)
         } else {
             legacyTabs

@@ -38,7 +38,7 @@ class BoxJsViewModel: ObservableObject {
         appSubCaches: [:],
         datas: [:],
         sessions: [],
-        usercfgs: UserConfig(appsubs: [], favapps: [], bgimgs: "", bgimg: "", name: nil, icon: nil, viewkeys: nil, gist_cache_key: nil, theme: nil, isTransparentIcons: nil, isWallpaperMode: nil, isMute: nil, isMuteQueryAlert: nil, isHideHelp: nil, isHideBoxIcon: nil, isHideMyTitle: nil, isHideCoding: nil, isHideRefresh: nil, isDebugWeb: nil, lang: nil, httpapi: nil, httpapis: nil),
+        usercfgs: UserConfig(appsubs: [], favapps: [], bgimgs: "", bgimg: "", name: nil, icon: nil, viewkeys: nil, gist_cache_key: nil, theme: nil, color_light_primary: nil, color_dark_primary: nil, isTransparentIcons: nil, isWallpaperMode: nil, isMute: nil, isMuteQueryAlert: nil, isHideHelp: nil, isHideBoxIcon: nil, isHideMyTitle: nil, isHideCoding: nil, isHideRefresh: nil, isDebugWeb: nil, lang: nil, httpapi: nil, httpapis: nil),
         sysapps: [],
         globalbaks: nil,
         curSessions: nil,

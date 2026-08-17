@@ -194,7 +194,9 @@ struct NavigationBarModifier<Trailing: View>: ViewModifier {
                                     progress: barProgress)
                     }
                 },
-            tint: .white, barColorScheme: .dark, legacyUsesPrincipal: false
+            // 箭头压在深色头图上，必须白；不能跟随主题色。
+            tint: .white, arrowTint: .white,
+            barColorScheme: .dark, legacyUsesPrincipal: false
         )
         .overlay(alignment: .top) {
             if let trailingContent = presentation.trailingContent {
@@ -234,7 +236,9 @@ struct NavigationBarModifier<Trailing: View>: ViewModifier {
         scrollWired(
             titled(content.navigationBarEdgeFade(tint: background, enabled: fade,
                                                  ownsScrollEdge: ownsScrollEdge),
-                   tint: .textPrimary, barColorScheme: nil, legacyUsesPrincipal: true)
+                   // 标题走正文色；箭头传 nil = 跟随主题色（iOS 惯例）。
+                   tint: .textPrimary, arrowTint: nil,
+                   barColorScheme: nil, legacyUsesPrincipal: true)
         )
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -260,6 +264,7 @@ struct NavigationBarModifier<Trailing: View>: ViewModifier {
 
     @ViewBuilder
     private func titled<V: View>(_ view: V, tint: Color,
+                                 arrowTint: Color?,
                                  barColorScheme: ColorScheme?,
                                  legacyUsesPrincipal: Bool) -> some View {
         switch presentation.title {
@@ -267,14 +272,14 @@ struct NavigationBarModifier<Trailing: View>: ViewModifier {
             view
         case .fixed(let text):
             view.navigationBarTitle(NavigationBarTitlePresentation(
-                title: text, tint: tint,
+                title: text, tint: tint, arrowTint: arrowTint,
                 trailingButtonWidth: presentation.trailingWidth,
                 trailingButtonMaxWidth: presentation.trailingMaxWidth,
                 horizontalAlignment: presentation.titleAlignment,
                 mode: .always, barColorScheme: barColorScheme))
         case .reveal(let text):
             view.navigationBarTitle(NavigationBarTitlePresentation(
-                title: text, tint: tint,
+                title: text, tint: tint, arrowTint: arrowTint,
                 trailingButtonWidth: presentation.trailingWidth,
                 trailingButtonMaxWidth: presentation.trailingMaxWidth,
                 horizontalAlignment: presentation.titleAlignment,

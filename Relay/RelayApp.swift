@@ -50,6 +50,7 @@ struct RelayApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .relayThemedAccent()
                 .environmentObject(apiManager)
                 .environmentObject(toastManager)
                 .environmentObject(boxModel)

@@ -238,9 +238,9 @@ struct AppScriptsView: View {
                     } icon: {
                         Text("\(index + 1)")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundColor(.white)
+                            .foregroundColor(.onAccent)
                             .frame(width: 22, height: 22)
-                            .background(Color.accentColor.opacity(0.8), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .background(Color.accent.opacity(0.8), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     Spacer()
                     if isLoading && loadingScript == script.script {

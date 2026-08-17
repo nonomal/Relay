@@ -278,7 +278,13 @@ struct UserConfig: Codable {
     let viewkeys: [String]?
     let gist_cache_key: [String]?
     // Preferences
+    /// 外观模式：`light` / `dark` / `auto`（缺省即 `auto`，跟随系统）。
+    /// 它同时决定 `color_light_primary` 与 `color_dark_primary` 哪个生效。
     let theme: String?
+    /// 浅色下的主题色，BoxJs 存十六进制串（默认 `#F7BB0E`）
+    let color_light_primary: String?
+    /// 深色下的主题色，BoxJs 存十六进制串（默认 `#2196F3`）
+    let color_dark_primary: String?
     let isTransparentIcons: Bool?
     let isWallpaperMode: Bool?
     let isMute: Bool?
@@ -308,6 +314,8 @@ extension UserConfig {
         viewkeys: [String]? = nil,
         gist_cache_key: [String]? = nil,
         theme: String? = nil,
+        color_light_primary: String? = nil,
+        color_dark_primary: String? = nil,
         isTransparentIcons: Bool? = nil,
         isWallpaperMode: Bool? = nil,
         isMute: Bool? = nil,
@@ -332,6 +340,8 @@ extension UserConfig {
             viewkeys: viewkeys ?? self.viewkeys,
             gist_cache_key: gist_cache_key ?? self.gist_cache_key,
             theme: theme ?? self.theme,
+            color_light_primary: color_light_primary ?? self.color_light_primary,
+            color_dark_primary: color_dark_primary ?? self.color_dark_primary,
             isTransparentIcons: isTransparentIcons ?? self.isTransparentIcons,
             isWallpaperMode: isWallpaperMode ?? self.isWallpaperMode,
             isMute: isMute ?? self.isMute,
@@ -387,9 +397,67 @@ extension UserConfig {
         case "isWallpaperMode":
             guard let v = value as? Bool else { return nil }
             return with(isWallpaperMode: v)
+        case "theme":
+            guard let v = value as? String else { return nil }
+            return with(theme: v)
+        case "color_light_primary":
+            guard let v = value as? String else { return nil }
+            return with(color_light_primary: v)
+        case "color_dark_primary":
+            guard let v = value as? String else { return nil }
+            return with(color_dark_primary: v)
         default:
             return nil
         }
+    }
+}
+
+/// BoxJs 的外观模式，决定两个主题色哪个生效。
+enum BoxThemeMode: String, CaseIterable {
+    case auto
+    case light
+    case dark
+
+    var displayName: String {
+        switch self {
+        case .auto: return "自动"
+        case .light: return "浅色"
+        case .dark: return "深色"
+        }
+    }
+
+    /// `auto` 跟随系统，其余强制。
+    func isDark(systemIsDark: Bool) -> Bool {
+        switch self {
+        case .auto: return systemIsDark
+        case .light: return false
+        case .dark: return true
+        }
+    }
+}
+
+extension UserConfig {
+    /// BoxJs 偏好设置里的出厂值，`nil` / 空串时回落到它。
+    static let defaultLightPrimary = "#F7BB0E"
+    static let defaultDarkPrimary = "#2196F3"
+
+    /// `theme` 缺省或非法值时按 `auto`（跟随系统）处理。
+    ///
+    /// 刻意与网页版不同：网页版 `isDarkMode` 把 `isDark` 初始化为 `true`，
+    /// 于是未设置时落到「深色」。原生端跟随 iOS 外观才是对的行为——
+    /// 未配置过就强制深色会盖掉系统设置。只有显式的 `light` / `dark` 才强制。
+    var themeMode: BoxThemeMode {
+        guard let theme, let mode = BoxThemeMode(rawValue: theme) else { return .auto }
+        return mode
+    }
+
+    /// 解析出当前该用的主题色十六进制串。空串视为未设置。
+    func resolvedPrimaryHex(isDark: Bool) -> String {
+        let raw = isDark ? color_dark_primary : color_light_primary
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return isDark ? Self.defaultDarkPrimary : Self.defaultLightPrimary
+        }
+        return raw
     }
 }
 

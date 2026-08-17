@@ -226,13 +226,13 @@ private extension ProfileView {
             ZStack {
                 Circle()
                     .fill(LinearGradient(
-                        colors: [.accentBlue, .accentBlueDark],
+                        colors: [.accent, .accentDark],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ))
                 Image(systemName: "person.fill")
                     .font(.system(size: 13))
-                    .foregroundColor(.white)
+                    .foregroundColor(.onAccent)
             }
         }
     }
@@ -441,14 +441,14 @@ private struct ProfileHeaderCard: View {
             ZStack {
                 Circle()
                     .fill(LinearGradient(
-                        colors: [.accentBlue, .accentBlueDark],
+                        colors: [.accent, .accentDark],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ))
                     .frame(width: 64, height: 64)
                 Image(systemName: "person.fill")
                     .font(.system(size: 28))
-                    .foregroundColor(.white)
+                    .foregroundColor(.onAccent)
             }
             .overlay(Circle().stroke(Color.white, lineWidth: 3))
             .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
@@ -467,7 +467,7 @@ private struct ProfileStatsRow: View {
         HStack(spacing: 12) {
             StatCard(icon: "app.badge", label: "应用", count: appCount, color: .accent)
             StatCard(icon: "square.stack", label: "订阅", count: subCount, color: Color.accentCoral)
-            StatCard(icon: "person.2", label: "会话", count: sessionCount, color: Color.accentBlue)
+            StatCard(icon: "person.2", label: "会话", count: sessionCount, color: Color.accent)
         }
     }
 }
@@ -716,7 +716,7 @@ private struct ProfileBackupSection: View {
                                 BackupRow(backup: bak, formatTime: formatTime)
                             },
                             actions: [
-                                SwipeAction(title: "恢复", icon: "arrow.counterclockwise", color: .accentBlue) {
+                                SwipeAction(title: "恢复", icon: "arrow.counterclockwise", color: .accent) {
                                     onRevert(bak.id)
                                 },
                                 SwipeAction(title: "导出", icon: "square.and.arrow.up", color: .orange) {
@@ -788,11 +788,11 @@ private struct BackupRow: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.accentBlueLight)
+                    .fill(Color.accentLight)
                     .frame(width: 36, height: 36)
                 Image(systemName: "icloud.fill")
                     .font(.system(size: 14))
-                    .foregroundColor(Color.accentBlue)
+                    .foregroundColor(Color.accent)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -922,13 +922,13 @@ private struct EditProfileSheet: View {
             ZStack {
                 Circle()
                     .fill(LinearGradient(
-                        colors: [.accentBlue, .accentBlueDark],
+                        colors: [.accent, .accentDark],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ))
                 Image(systemName: "person.fill")
                     .font(.system(size: 32))
-                    .foregroundColor(.white)
+                    .foregroundColor(.onAccent)
             }
         }
     }

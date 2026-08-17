@@ -55,6 +55,9 @@
 		E24439B62F9294A0000E352F /* ApiManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E210FCEE2CBF6DC7004A8CFB /* ApiManager.swift */; };
 		E24439B72F9294A0000E352F /* ToastManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E8BA842C6CA43300C2AF9E /* ToastManager.swift */; };
 		A10000010000000100000172 /* WallpaperPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000174 /* WallpaperPalette.swift */; };
+		A10000010000000100000192 /* RelayThemedAccent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000194 /* RelayThemedAccent.swift */; };
+		A100000100000001000001A2 /* ThemeSwatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000100000001000001A4 /* ThemeSwatch.swift */; };
+		A10000010000000100000182 /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000184 /* ThemePalette.swift */; };
 		E24439B82F9294A0000E352F /* LogManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000010000000000000002 /* LogManager.swift */; };
 		E24439B92F9294A0000E352F /* ArrayExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E9E2632C464CC300836E4B /* ArrayExtension.swift */; };
 		E24439D02F9294A0000E352F /* PlatformBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24439C02F9294A0000E352F /* PlatformBridge.swift */; };
@@ -141,6 +144,9 @@
 		E2E8BA812C6B67BB00C2AF9E /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
 		E2E8BA842C6CA43300C2AF9E /* ToastManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastManager.swift; sourceTree = "<group>"; };
 		A10000010000000100000174 /* WallpaperPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperPalette.swift; sourceTree = "<group>"; };
+		A10000010000000100000194 /* RelayThemedAccent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayThemedAccent.swift; sourceTree = "<group>"; };
+		A100000100000001000001A4 /* ThemeSwatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeSwatch.swift; sourceTree = "<group>"; };
+		A10000010000000100000184 /* ThemePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePalette.swift; sourceTree = "<group>"; };
 		E2E8BA862C6CA46400C2AF9E /* GlobalToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalToastView.swift; sourceTree = "<group>"; };
 		E2E9E24F2C3FE9A800836E4B /* Vibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vibration.swift; sourceTree = "<group>"; };
 		E2E9E2512C40FD5000836E4B /* ApiRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApiRequest.swift; sourceTree = "<group>"; };
@@ -248,6 +254,7 @@
 				F10000010000000000000002 /* LogManager.swift */,
 				E2E8BA842C6CA43300C2AF9E /* ToastManager.swift */,
 				A10000010000000100000174 /* WallpaperPalette.swift */,
+				A10000010000000100000184 /* ThemePalette.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -376,6 +383,8 @@
 				A100000200000001000000A2 /* SwipeActionRow.swift */,
 				A100000300000001000000A2 /* BoxJSInstallGuideView.swift */,
 				A10000010000000100000124 /* RelayPageBackground.swift */,
+				A10000010000000100000194 /* RelayThemedAccent.swift */,
+				A100000100000001000001A4 /* ThemeSwatch.swift */,
 				A10000010000000100000164 /* RelayNavigationBarLayer.swift */,
 				A10000010000000100000154 /* RelayNavigationBarContent.swift */,
 				A10000010000000100000144 /* RelayNavigationBar.swift */,
@@ -557,6 +566,9 @@
 				AA00000100000007000000A1 /* WallpaperPickerView.swift in Sources */,
 				A10000010000000100000122 /* RelayPageBackground.swift in Sources */,
 				A10000010000000100000172 /* WallpaperPalette.swift in Sources */,
+				A10000010000000100000192 /* RelayThemedAccent.swift in Sources */,
+				A100000100000001000001A2 /* ThemeSwatch.swift in Sources */,
+				A10000010000000100000182 /* ThemePalette.swift in Sources */,
 				A10000010000000100000162 /* RelayNavigationBarLayer.swift in Sources */,
 				A10000010000000100000152 /* RelayNavigationBarContent.swift in Sources */,
 				A10000010000000100000142 /* RelayNavigationBar.swift in Sources */,

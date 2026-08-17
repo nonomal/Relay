@@ -105,6 +105,10 @@ struct PreferencesView: View {
         IconAppearance(rawValue: iconAppearanceRaw) ?? .auto
     }
 
+    private var themeModeSummary: String {
+        (usercfgs?.themeMode ?? .auto).displayName
+    }
+
     /// 优先显示壁纸在 BoxJs 清单里的名字，自定义地址则显示「自定义」
     private var wallpaperSummary: String {
         guard let bgimg = usercfgs?.bgimg, !bgimg.isEmpty else { return "无" }
@@ -122,6 +126,23 @@ struct PreferencesView: View {
             }
 
             Section(header: Text("外观")) {
+                NavigationLink {
+                    ThemeColorPickerView()
+                } label: {
+                    HStack {
+                        Text("主题色")
+                        Spacer()
+                        Text(themeModeSummary)
+                            .foregroundColor(.secondary)
+                        // 两个模式各自的色点，一眼看出配了什么色
+                        ForEach(ThemeColorSlot.allCases, id: \.self) { slot in
+                            ThemeSwatch(
+                                hex: usercfgs?.resolvedPrimaryHex(isDark: slot.isDark) ?? slot.fallback,
+                                size: 16
+                            )
+                        }
+                    }
+                }
                 NavigationLink {
                     AppIconPickerView()
                 } label: {
@@ -282,6 +303,178 @@ struct AppIconPickerView: View {
         }
         .navigationTitle("应用图标")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Theme Colour Picker
+
+/// Identifies which of the two BoxJs theme colours a row edits.
+///
+/// BoxJs keys the colours by appearance, so each slot owns its own config path
+/// and factory default rather than the caller passing a matching set of four
+/// correlated arguments (which nothing stopped from being mismatched).
+enum ThemeColorSlot: CaseIterable {
+    case light
+    case dark
+
+    var title: String {
+        switch self {
+        case .light: return "明亮色调"
+        case .dark: return "暗黑色调"
+        }
+    }
+
+    var footer: String {
+        switch self {
+        case .light: return "浅色模式下使用的主色调。"
+        case .dark: return "深色模式下使用的主色调。"
+        }
+    }
+
+    var path: String {
+        switch self {
+        case .light: return "usercfgs.color_light_primary"
+        case .dark: return "usercfgs.color_dark_primary"
+        }
+    }
+
+    /// BoxJs 偏好设置里的出厂色
+    var fallback: String {
+        switch self {
+        case .light: return UserConfig.defaultLightPrimary
+        case .dark: return UserConfig.defaultDarkPrimary
+        }
+    }
+
+    var isDark: Bool { self == .dark }
+}
+
+/// Mirrors BoxJs 偏好设置: an appearance mode plus one accent colour per mode.
+///
+/// BoxJs stores two colours (`color_light_primary` / `color_dark_primary`) and
+/// picks between them with `theme`, so both are editable here regardless of
+/// which one is currently active.
+struct ThemeColorPickerView: View {
+    @EnvironmentObject var boxModel: BoxJsViewModel
+
+    var body: some View {
+        Form {
+            ThemeModeSection(
+                mode: boxModel.boxData.usercfgs?.themeMode ?? .auto,
+                onSelect: selectMode
+            )
+
+            ForEach(ThemeColorSlot.allCases, id: \.self) { slot in
+                ThemeColorSection(
+                    slot: slot,
+                    hex: hex(for: slot),
+                    onPick: { updateColor(slot, to: $0) }
+                )
+            }
+        }
+        .navigationTitle("主题色")
+        .navigationBarTitleDisplayMode(.inline)
+        .onDisappear(perform: flush)
+    }
+
+    private func hex(for slot: ThemeColorSlot) -> String {
+        boxModel.boxData.usercfgs?.resolvedPrimaryHex(isDark: slot.isDark) ?? slot.fallback
+    }
+
+    private func selectMode(_ mode: BoxThemeMode) {
+        boxModel.updateData(path: "usercfgs.theme", data: mode.rawValue)
+    }
+
+    private func updateColor(_ slot: ThemeColorSlot, to hex: String) {
+        boxModel.updateData(path: slot.path, data: hex)
+    }
+
+    private func flush() {
+        Task { await boxModel.flushPendingDataUpdates() }
+    }
+}
+
+// MARK: -
+
+/// Appearance mode picker — `light` / `dark` / `auto`.
+private struct ThemeModeSection: View {
+    let mode: BoxThemeMode
+    let onSelect: (BoxThemeMode) -> Void
+
+    var body: some View {
+        Section {
+            ForEach(BoxThemeMode.allCases, id: \.self) { option in
+                Button { onSelect(option) } label: {
+                    HStack {
+                        Text(option.displayName)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        if mode == option {
+                            Image(systemName: "checkmark")
+                                .font(.body.weight(.semibold))
+                                .foregroundColor(.accent)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("外观")
+        } footer: {
+            Text("「自动」跟随系统深浅色，并据此选用下面对应的主题色。")
+        }
+    }
+}
+
+/// One appearance's accent colour, with a reset row once it differs from the
+/// BoxJs factory value.
+private struct ThemeColorSection: View {
+    let slot: ThemeColorSlot
+    let hex: String
+    let onPick: (String) -> Void
+
+    private var isDefault: Bool {
+        hex.caseInsensitiveCompare(slot.fallback) == .orderedSame
+    }
+
+    /// BoxJs 存的是十六进制串，`ColorPicker` 给的是 `Color`，在这里互转。
+    private var color: Binding<Color> {
+        Binding(
+            get: { Color(hex: hex) },
+            set: { onPick($0.toHex()) }
+        )
+    }
+
+    var body: some View {
+        Section {
+            ColorPicker(selection: color, supportsOpacity: false) {
+                ThemeColorLabel(title: slot.title, hex: hex)
+            }
+
+            // 与网页版一致：给一个恢复出厂色的入口，避免只能靠手调回去
+            if !isDefault {
+                Button("恢复默认") { onPick(slot.fallback) }
+            }
+        } footer: {
+            Text(slot.footer)
+        }
+    }
+}
+
+/// Swatch + name + hex, used as the `ColorPicker` label.
+private struct ThemeColorLabel: View {
+    let title: String
+    let hex: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ThemeSwatch(hex: hex)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(hex.uppercased())
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 }
 
