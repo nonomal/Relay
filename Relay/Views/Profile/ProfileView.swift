@@ -1102,7 +1102,7 @@ struct ApiSettingsView: View {
 
     private func saveAndDismiss() {
         dismissKeyboard()
-        let trimmed = apiUrlInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = ApiManager.normalizeHost(apiUrlInput)
         guard !trimmed.isEmpty else { return }
         appLog(.info, category: .ui, "[ApiSettings] save host: \(trimmed)")
         apiManager.apiUrl = trimmed

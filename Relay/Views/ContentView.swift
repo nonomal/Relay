@@ -165,7 +165,7 @@ struct ContentView: View {
                 WelcomeSetupView(
                     apiUrlInput: $apiUrlInput,
                     onConnect: {
-                        let trimmed = apiUrlInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let trimmed = ApiManager.normalizeHost(apiUrlInput)
                         if !trimmed.isEmpty {
                             appLog(.info, category: .app, "[WelcomeSetup] connect tapped with host: \(trimmed)")
                             apiManager.apiUrl = trimmed

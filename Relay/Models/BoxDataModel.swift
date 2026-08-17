@@ -66,17 +66,23 @@ struct AppSubCache: Codable, Identifiable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
 
-        id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
-        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "匿名订阅"
-        icon = try c.decodeIfPresent(String.self, forKey: .icon) ?? ""
-        author = try c.decodeIfPresent(String.self, forKey: .author) ?? "@anonymous"
-        repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
-        updateTime = try c.decodeIfPresent(String.self, forKey: .updateTime) ?? ""
-        apps = try c.decodeIfPresent([AppModel].self, forKey: .apps) ?? []
+        id = c.decodeFlexibleString(forKey: .id) ?? ""
+        name = c.decodeFlexibleString(forKey: .name) ?? "匿名订阅"
+        icon = c.decodeFlexibleString(forKey: .icon) ?? ""
+        author = c.decodeFlexibleString(forKey: .author) ?? "@anonymous"
+        repo = c.decodeFlexibleString(forKey: .repo) ?? ""
+        updateTime = c.decodeFlexibleString(forKey: .updateTime) ?? ""
+        // Skip malformed apps rather than failing the whole subscription.
+        let decodedApps = c.decodeLenientArray(AppModel.self, forKey: .apps)
+        apps = decodedApps?.elements ?? []
+        if let skipped = decodedApps?.skippedCount, skipped > 0 {
+            appLog(.warning, category: .network,
+                   "[AppSubCache] skipped \(skipped) malformed app(s) in subscription \(name)")
+        }
 
         isErr = try c.decodeIfPresent(Bool.self, forKey: .isErr)
         enable = try c.decodeIfPresent(Bool.self, forKey: .enable)
-        url = try c.decodeIfPresent(String.self, forKey: .url)
+        url = c.decodeFlexibleString(forKey: .url)
 
         // BoxJS ecosystem has mixed formats here:
         // - object: { "enable": true, "url": "...", ... }
@@ -185,6 +191,89 @@ struct Setting: Codable {
     }
 }
 
+/// Decodes an array element-by-element, dropping entries that fail to decode.
+///
+/// Subscription JSON is hand-authored and frequently malformed in ways no field-level
+/// tolerance can anticipate (a missing `id`, an object where a list belongs). Without
+/// this, one bad app anywhere in `boxdata` fails the whole response and the app is left
+/// with no data at all. Skipping the bad entry keeps every valid one usable.
+struct LenientArray<Element: Decodable>: Decodable {
+    let elements: [Element]
+    /// Number of entries that failed to decode and were skipped.
+    let skippedCount: Int
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var elements: [Element] = []
+        if let count = container.count {
+            elements.reserveCapacity(count)
+        }
+        var skipped = 0
+        while !container.isAtEnd {
+            // A failed decode must still consume the element, or the loop never advances.
+            // Decoding into an opaque placeholder is what moves the cursor forward.
+            do {
+                elements.append(try container.decode(Element.self))
+            } catch {
+                skipped += 1
+                _ = try? container.decode(DiscardedValue.self)
+            }
+        }
+        self.elements = elements
+        self.skippedCount = skipped
+    }
+}
+
+/// Consumes exactly one element of any shape without interpreting it.
+private struct DiscardedValue: Decodable {
+    init(from decoder: Decoder) throws {
+        // Succeeds for any JSON value, so a malformed element is always consumed.
+        _ = try? decoder.singleValueContainer()
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// Decodes an array, skipping elements that fail. Returns nil when the key is absent
+    /// or the value is not an array at all.
+    func decodeLenientArray<Element: Decodable>(
+        _ type: Element.Type,
+        forKey key: Key
+    ) -> (elements: [Element], skippedCount: Int)? {
+        guard let wrapper = try? decodeIfPresent(LenientArray<Element>.self, forKey: key) else {
+            return nil
+        }
+        return (wrapper.elements, wrapper.skippedCount)
+    }
+}
+
+/// Subscription JSON is hand-authored, so fields documented as strings are
+/// sometimes published as arrays of strings (and vice versa). Decoding either
+/// shape keeps one malformed app from failing the entire boxdata payload.
+extension KeyedDecodingContainer {
+    /// Decodes a string that may arrive as `"a"`, `["a", "b"]`, or be absent.
+    /// Arrays are joined so no authored content is silently dropped.
+    func decodeFlexibleString(forKey key: Key, joinedBy separator: String = "\n") -> String? {
+        if let single = try? decodeIfPresent(String.self, forKey: key) {
+            return single
+        }
+        if let many = try? decodeIfPresent([String].self, forKey: key) {
+            return many.isEmpty ? nil : many.joined(separator: separator)
+        }
+        return nil
+    }
+
+    /// Decodes a string array that may arrive as a bare `"a"`, or be absent.
+    func decodeFlexibleStringArray(forKey key: Key) -> [String]? {
+        if let many = try? decodeIfPresent([String].self, forKey: key) {
+            return many
+        }
+        if let single = try? decodeIfPresent(String.self, forKey: key) {
+            return [single]
+        }
+        return nil
+    }
+}
+
 struct AppModel: Codable, Identifiable {
     var id: String
     let name: String
@@ -216,32 +305,28 @@ struct AppModel: Codable, Identifiable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
-        author = try c.decodeIfPresent(String.self, forKey: .author) ?? "@anonymous"
-        repo = try c.decodeIfPresent(String.self, forKey: .repo)
-        descs = try c.decodeIfPresent([String].self, forKey: .descs)
-        keys = try c.decodeIfPresent([String].self, forKey: .keys)
-        icons = try c.decode([String].self, forKey: .icons)
-        desc = try c.decodeIfPresent(String.self, forKey: .desc)
-        script = try c.decodeIfPresent(String.self, forKey: .script)
+        author = c.decodeFlexibleString(forKey: .author) ?? "@anonymous"
+        // Published as an array by some subscriptions (e.g. cenbomin.box.json).
+        repo = c.decodeFlexibleString(forKey: .repo)
+        descs = c.decodeFlexibleStringArray(forKey: .descs)
+        keys = c.decodeFlexibleStringArray(forKey: .keys)
+        // Some subscriptions omit `icons` entirely; a single missing key must not
+        // fail the whole boxdata decode. `icon` is used as the fallback source.
+        icons = c.decodeFlexibleStringArray(forKey: .icons) ?? []
+        desc = c.decodeFlexibleString(forKey: .desc)
+        script = c.decodeFlexibleString(forKey: .script)
         scripts = try c.decodeIfPresent([RunScript].self, forKey: .scripts)
 
         // Some subscriptions return `desc_html` as [String] instead of String.
         // Keep backward compatibility by accepting both shapes.
-        let descHTMLString = try? c.decodeIfPresent(String.self, forKey: .desc_html)
-        let descHTMLArray = try? c.decodeIfPresent([String].self, forKey: .desc_html)
-        let descsHTMLArray = try? c.decodeIfPresent([String].self, forKey: .descs_html)
-        let descsHTMLString = try? c.decodeIfPresent(String.self, forKey: .descs_html)
-
-        desc_html = descHTMLString ?? descHTMLArray?.joined(separator: "<br>")
-        descs_html = descsHTMLArray
-            ?? descHTMLArray
-            ?? descsHTMLString.map { [$0] }
-            ?? descHTMLString.map { [$0] }
+        desc_html = c.decodeFlexibleString(forKey: .desc_html, joinedBy: "<br>")
+        descs_html = c.decodeFlexibleStringArray(forKey: .descs_html)
+            ?? c.decodeFlexibleStringArray(forKey: .desc_html)
 
         settings = try c.decodeIfPresent([Setting].self, forKey: .settings)
-        favIcon = try c.decodeIfPresent(String.self, forKey: .favIcon)
-        icon = try c.decodeIfPresent(String.self, forKey: .icon)
-        favIconColor = try c.decodeIfPresent(String.self, forKey: .favIconColor)
+        favIcon = c.decodeFlexibleString(forKey: .favIcon)
+        icon = c.decodeFlexibleString(forKey: .icon)
+        favIconColor = c.decodeFlexibleString(forKey: .favIconColor)
         isFav = try c.decodeIfPresent(Bool.self, forKey: .isFav)
     }
 }
@@ -556,6 +641,53 @@ struct DataQueryResp: Codable {
     let val: AnyCodable?
 }
 
+/// Declared in an extension so the memberwise initializer stays synthesized —
+/// `replacingUsercfgs`/`replacingSessions` and the view model both rely on it.
+extension BoxDataResp {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        // A single malformed subscription or app must not cost the user every
+        // other one, so both collections drop only the entries that fail.
+        var caches: [String: AppSubCache] = [:]
+        if let rawCaches = try? c.decodeIfPresent([String: AppSubCache].self, forKey: .appSubCaches) {
+            caches = rawCaches
+        } else if let keyed = try? c.nestedContainer(keyedBy: AnyStringKey.self, forKey: .appSubCaches) {
+            for key in keyed.allKeys {
+                if let cache = try? keyed.decode(AppSubCache.self, forKey: key) {
+                    caches[key.stringValue] = cache
+                } else {
+                    appLog(.warning, category: .network,
+                           "[BoxDataResp] skipped malformed subscription: \(key.stringValue)")
+                }
+            }
+        }
+        appSubCaches = caches
+
+        datas = (try? c.decodeIfPresent([String: AnyCodable?].self, forKey: .datas)) ?? [:]
+        sessions = c.decodeLenientArray(Session.self, forKey: .sessions)?.elements ?? []
+        usercfgs = try? c.decodeIfPresent(UserConfig.self, forKey: .usercfgs)
+
+        let decodedSysApps = c.decodeLenientArray(AppModel.self, forKey: .sysapps)
+        sysapps = decodedSysApps?.elements ?? []
+        if let skipped = decodedSysApps?.skippedCount, skipped > 0 {
+            appLog(.warning, category: .network, "[BoxDataResp] skipped \(skipped) malformed sysapp(s)")
+        }
+
+        globalbaks = c.decodeLenientArray(GlobalBackup.self, forKey: .globalbaks)?.elements
+        curSessions = try? c.decodeIfPresent([String: String].self, forKey: .curSessions)
+        syscfgs = try? c.decodeIfPresent(SysCfgs.self, forKey: .syscfgs)
+    }
+}
+
+/// Dynamic key for containers whose keys are arbitrary strings (subscription URLs).
+private struct AnyStringKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { nil }
+}
+
 struct BoxDataResp: Codable {
     let appSubCaches: [String: AppSubCache]
     let datas: [String: AnyCodable?]
@@ -690,9 +822,13 @@ struct BoxDataResp: Codable {
     func loadAppBaseInfo(_ app: AppModel) -> AppModel {
         var icons = app.icons
 
-        if app.icons.first(where: { $0.contains("/Orz-3/task/master/") }) != nil {
-            icons[0] = app.icons[0].replacingOccurrences(of: "/Orz-3/mini/master/", with: "/Orz-3/mini/master/Alpha/")
-            icons[1] = app.icons[1].replacingOccurrences(of: "/Orz-3/task/master/", with: "/Orz-3/mini/master/Color/")
+        if icons.contains(where: { $0.contains("/Orz-3/task/master/") }) {
+            if icons.indices.contains(0) {
+                icons[0] = icons[0].replacingOccurrences(of: "/Orz-3/mini/master/", with: "/Orz-3/mini/master/Alpha/")
+            }
+            if icons.indices.contains(1) {
+                icons[1] = icons[1].replacingOccurrences(of: "/Orz-3/task/master/", with: "/Orz-3/mini/master/Color/")
+            }
         }
         let isFav = usercfgs?.favapps.contains(app.id) ?? false
 

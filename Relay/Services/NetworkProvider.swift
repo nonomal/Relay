@@ -35,6 +35,12 @@ private struct APIEnvelope: Decodable {
 
 // MARK: - Response Mapping
 
+/// True when the body is exactly the JSON literal `null` (ignoring whitespace).
+private func isNullBody(_ data: Data) -> Bool {
+    guard let text = String(data: data, encoding: .utf8) else { return false }
+    return text.trimmingCharacters(in: .whitespacesAndNewlines) == "null"
+}
+
 extension Response {
     /// Validates the BoxJS `code` field, then decodes the full body as T.
     func mapBoxJS<T: Decodable>(_ type: T.Type,
@@ -53,7 +59,16 @@ extension Response {
             }
         }
 
-        // 3. Decode full response
+        // 3. Decode full response.
+        // BoxJS returns a bare `null` body for calls that succeed with no payload
+        // (e.g. a script that never reports output). That is valid JSON but has no
+        // keyed container, so decode it as an all-nil value rather than failing.
+        if isNullBody(filtered.data) {
+            if let empty = try? decoder.decode(T.self, from: Data("{}".utf8)) {
+                return empty
+            }
+        }
+
         do {
             return try decoder.decode(T.self, from: filtered.data)
         } catch {

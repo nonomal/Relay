@@ -34,6 +34,25 @@ class ApiManager: ObservableObject {
     /// Returns the base URL with no trailing slash, e.g. `ApiManager.defaultAPIURL`
     var baseURL: String {
         guard let url = apiUrl, !url.isEmpty else { return Self.defaultAPIURL }
-        return url.hasSuffix("/") ? String(url.dropLast()) : url
+        let normalized = Self.normalizeHost(url)
+        return normalized.isEmpty ? Self.defaultAPIURL : normalized
+    }
+
+    /// Normalizes a user-entered host into an API base URL.
+    ///
+    /// The BoxJS web UI is a fragment-routed SPA, so its address bar reads
+    /// `http://host/#/`. Pasting that verbatim makes every request a fragment
+    /// (`/#/query/boxdata`), which the server never receives — it just returns the
+    /// SPA's HTML and JSON decoding fails on `<`. Drop the fragment, and any
+    /// trailing slashes left behind.
+    static func normalizeHost(_ raw: String) -> String {
+        var host = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let hashIndex = host.firstIndex(of: "#") {
+            host = String(host[host.startIndex..<hashIndex])
+        }
+        while host.hasSuffix("/") {
+            host = String(host.dropLast())
+        }
+        return host
     }
 }
