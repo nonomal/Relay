@@ -16,18 +16,15 @@ struct SubDetailView: View {
     let subURL: String?
 
     @EnvironmentObject var boxModel: BoxJsViewModel
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage(SubDetailLayoutMode.userDefaultsKey) private var layoutModeRaw: String = SubDetailLayoutMode.grid.rawValue
 
     @State private var items: [AppModel] = []
     @StateObject private var router = RelayRouter()
-    @State private var isScrolled: Bool = false
 
     /// Derived from boxData on appear / change — only the header fields, no apps array.
     @State private var subName: String = ""
-    @State private var subIcon: String = ""
 
     private var isListMode: Bool {
         SubDetailLayoutMode(rawValue: layoutModeRaw) == .list
@@ -35,25 +32,17 @@ struct SubDetailView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Same gradient as HomeView
-            LinearGradient(
-                colors: Color.pageGradientColors,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            RelayPageBackground()
 
-            VStack(spacing: 0) {
-                Color.clear.frame(height: 56)
-
+            Group {
                 if items.isEmpty {
                     VStack {
                         Spacer()
                         Image(systemName: "square.grid.2x2")
                             .font(.system(size: 48))
-                            .foregroundColor(.textSecondary.opacity(0.4))
+                            .relayWallpaperAwareForeground(.textSecondary.opacity(0.4))
                         Text("该订阅暂无应用")
-                            .foregroundColor(.textSecondary.opacity(0.7))
+                            .relayWallpaperAwareForeground(.textSecondary.opacity(0.7))
                         Spacer()
                     }
                 } else if isListMode {
@@ -62,15 +51,32 @@ struct SubDetailView: View {
                     appGridView
                 }
             }
-
-            // Nav bar on top — opaque, so grid content scrolls cleanly underneath.
-            VStack {
-                navBar
-                Spacer()
+        }
+        // 沉浸式导航栏：push 进来的详情页，标题走 `.reveal` —— 订阅名已经在
+        // 页内头部大字排着，静止时栏上不重复，滚过阈值才浮现。真正的 ScrollView
+        // 在 appListView / appGridView 内部，所以传 ownsScrollEdge: false。
+        .navigationBar(.init(
+            chrome: .plain(background: .gradientTop, ownsScrollEdge: false),
+            title: .reveal(subName)
+        ))
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        layoutModeRaw = isListMode
+                            ? SubDetailLayoutMode.grid.rawValue
+                            : SubDetailLayoutMode.list.rawValue
+                    }
+                } label: {
+                    Image(systemName: isListMode ? "square.grid.2x2" : "list.bullet")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .accessibilityLabel(isListMode ? "网格视图" : "列表视图")
             }
         }
-        .neboxHiddenNavigationBar()
-        .background(Color.gradientBottom.ignoresSafeArea(edges: .bottom))
+        .relayWallpaperAwareBackground {
+            Color.gradientBottom.ignoresSafeArea(edges: .bottom)
+        }
         // Destinations are attached per-cell/row so the zoom originates there.
         .onAppear { loadSubDetail() }
         .onDisappear {
@@ -85,71 +91,9 @@ struct SubDetailView: View {
         guard let url = subURL,
               let detail = boxModel.boxData.displayAppSubDetail(for: url) else { return }
         subName = detail.name
-        subIcon = detail.icon
         items = detail.apps
     }
 
-    // MARK: - Nav Bar
-
-    private var navBar: some View {
-        RelayNavBar(isScrolled: isScrolled) {
-            RelayBackButton(action: { dismiss() }) {
-                HStack(spacing: 6) {
-                    subAvatar
-
-                    Text(subName)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.textPrimary)
-                        .lineLimit(1)
-                }
-            }
-        } trailing: {
-            HStack(spacing: 14) {
-                // Layout toggle
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        layoutModeRaw = isListMode
-                            ? SubDetailLayoutMode.grid.rawValue
-                            : SubDetailLayoutMode.list.rawValue
-                    }
-                } label: {
-                    Image(systemName: isListMode ? "square.grid.2x2" : "list.bullet")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.accent)
-                }
-
-                // App count badge
-                Text("\(items.count) 个应用")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.textTertiary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var subAvatar: some View {
-        if !subIcon.isEmpty, let iconURL = URL(string: subIcon) {
-            WebImage(url: iconURL) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                subAvatarFallback
-            }
-            .frame(width: 28, height: 28)
-            .clipShape(Circle())
-        } else if !subName.isEmpty {
-            subAvatarFallback
-                .frame(width: 28, height: 28)
-                .clipShape(Circle())
-        }
-    }
-
-    private var subAvatarFallback: some View {
-        Text(String(subName.prefix(1)))
-            .font(.system(size: 28 * 0.42, weight: .semibold, design: .rounded))
-            .foregroundColor(.textSecondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.bgMuted)
-    }
 
     // MARK: - Card List View
 
@@ -194,7 +138,11 @@ struct SubDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, adaptiveBottomInset())
+            // `.reveal` 标题在 iOS 17 的滚动量来源（18+ 走官方 onScrollGeometryChange，
+            // 挂着也无害）。
+            .navigationBarScrollSource()
         }
+        .navigationBarScrollEdge()
     }
 
     /// Read-only grid: no edit mode or reordering, tap opens the app detail.
@@ -204,6 +152,8 @@ struct SubDetailView: View {
             boxModel: boxModel,
             router: router,
             isEditMode: .constant(false),
+            // 与列表模式一致：这页栏上有标题，首行不需要首页那么大的留白。
+            topInset: 8,
             allowsEdit: false,
             favAppIds: favAppIds,
             contextMenu: { app in
@@ -221,8 +171,7 @@ struct SubDetailView: View {
             },
             destination: { app in
                 AnyView(AppDetailView(app: app))
-            },
-            onScrolled: $isScrolled
+            }
         )
     }
 

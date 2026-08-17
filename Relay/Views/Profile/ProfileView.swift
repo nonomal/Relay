@@ -33,23 +33,18 @@ struct ProfileView: View {
     @State private var deletingBakName = ""
     @State private var backupOpenRowId: String?
     @State private var navBarProgress: CGFloat = 0
-    @State private var navBarBottomY: CGFloat?
     @State private var localAvatar: UIImage? = AvatarStorage.load()
+
+    /// 昵称淡入的滚动行程（pt）。
+    private static let navBarFadeTravel: CGFloat = 56
 
     var body: some View {
         neboxNavigationContainer {
             ZStack(alignment: .top) {
-                LinearGradient(
-                    colors: Color.pageGradientColors,
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                RelayPageBackground()
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        Color.clear.frame(height: 56)
-
                         ProfileHeaderCard(
                             usercfgs: boxModel.boxData.usercfgs,
                             apiUrl: apiManager.apiUrl,
@@ -62,12 +57,16 @@ struct ProfileView: View {
                                 let minY = geo.frame(in: .global).minY
                                 Color.clear
                                     .onChange(of: minY) { newMinY in
-                                        guard let navBottom = navBarBottomY else { return }
+                                        // 栏下沿改锚真实系统栏（NavigationBarMetrics.systemBand）——
+                                        // 自绘栏没了，原先靠 GeometryReader 量自己的 maxY 不再成立。
+                                        let band = NavigationBarMetrics.systemBand
+                                        let navBottom = band.top + band.height
                                         let distance = newMinY - navBottom
                                         // distance > 0 → card is below nav bar → progress = 0
                                         // distance == 0 → card just reached nav bar bottom → progress starts
-                                        // distance == -56 → card fully behind 56pt nav bar → progress = 1
-                                        navBarProgress = max(0, min(1, -distance / 56))
+                                        // distance == -fadeTravel → fully faded in → progress = 1
+                                        // 56 是淡入行程（不是栏高——栏高现在由 systemBand 决定）。
+                                        navBarProgress = max(0, min(1, -distance / Self.navBarFadeTravel))
                                     }
                             }
                         )
@@ -99,6 +98,8 @@ struct ProfileView: View {
                     }
                     .padding(.horizontal, 20)
                 }
+                // 压制 iOS 26 系统 scroll edge effect：必须直接挂在 ScrollView 上。
+                .navigationBarScrollEdge()
                 .simultaneousGesture(
                     TapGesture().onEnded {
                         if backupOpenRowId != nil {
@@ -118,26 +119,44 @@ struct ProfileView: View {
                     }
                 )
 
-                VStack {
-                    ProfileNavBar(
-                        usercfgs: boxModel.boxData.usercfgs,
-                        localAvatar: localAvatar,
-                        progress: navBarProgress,
-                        onSettings: { showApiSettings = true }
-                    )
-                    .background(Color.gradientTop.ignoresSafeArea())
-                    .overlay(
-                        GeometryReader { geo in
-                            let bottomY = geo.frame(in: .global).maxY
-                            Color.clear
-                                .onAppear { navBarBottomY = bottomY }
-                                .onChange(of: bottomY) { navBarBottomY = $0 }
-                        }
-                    )
-                    Spacer()
+            }
+            // 沉浸式导航栏。注意这层是 ZStack 不是 ScrollView（ScrollView 是它的子视图），
+            // 所以传 ownsScrollEdge: false —— `scrollEdgeVisible` 挂到非滚动容器上会
+            // 静默失效，压制系统边缘效果由上面那个 ScrollView 自己挂
+            // `.navigationBarScrollEdge()` 完成。
+            //
+            // 标题槽留空——头像+昵称那对组合不是字符串，`.reveal(String)` 表达不了，
+            // 走组件文档里的 `NavigationBarContent` 内容槽（TG 的 titleView 语义）。
+            .navigationBar(.init(
+                chrome: .plain(background: .gradientTop, ownsScrollEdge: false),
+                title: .none
+            ))
+            .overlay(alignment: .top) {
+                NavigationBarContent(
+                    visible: navBarProgress > 0.5,
+                    horizontalAlignment: .leading,
+                    leadingButtonWidth: nil
+                ) {
+                    HStack(spacing: 10) {
+                        navBarAvatar
+                            .frame(width: 28, height: 28)
+                            .clipShape(Circle())
+                        Text(boxModel.boxData.usercfgs?.name ?? "大侠, 请留名!")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.textPrimary)
+                            .lineLimit(1)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.22), value: navBarProgress > 0.5)
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { showApiSettings = true } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 16, weight: .medium))
+                    }
                 }
             }
-            .neboxHiddenNavigationBar()
             .sheet(isPresented: $showEditProfile) {
                 EditProfileSheet(
                     name: $editName,
@@ -186,6 +205,36 @@ struct ProfileView: View {
             }
         }
         .neboxLiquidGlassTabBarChrome()
+    }
+}
+
+private extension ProfileView {
+    /// 导航栏内容槽里的小头像（原 ProfileNavBar.navAvatarView 的等价物）。
+    @ViewBuilder
+    var navBarAvatar: some View {
+        if let avatar = localAvatar {
+            Image(uiImage: avatar)
+                .resizable()
+                .scaledToFill()
+        } else if let iconUrl = boxModel.boxData.usercfgs?.icon,
+                  !iconUrl.isEmpty,
+                  let url = URL(string: iconUrl) {
+            WebImage(url: url)
+                .resizable()
+                .scaledToFill()
+        } else {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [.accentBlue, .accentBlueDark],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                Image(systemName: "person.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white)
+            }
+        }
     }
 }
 
@@ -322,71 +371,6 @@ private extension ProfileView {
     }
 }
 
-// MARK: - Profile Nav Bar
-
-private struct ProfileNavBar: View {
-    let usercfgs: UserConfig?
-    var localAvatar: UIImage?
-    let progress: CGFloat
-    let onSettings: () -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            HStack(spacing: 10) {
-                navAvatarView
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
-
-                Text(usercfgs?.name ?? "大侠, 请留名!")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-                    .lineLimit(1)
-            }
-            .offset(y: (1 - progress) * 16)
-            .opacity(Double(progress))
-            .scaleEffect(0.85 + 0.15 * progress, anchor: .leading)
-
-            Spacer()
-
-            Button(action: onSettings) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.accent)
-            }
-        }
-        .frame(height: 56)
-        .padding(.horizontal, 20)
-    }
-
-    @ViewBuilder
-    private var navAvatarView: some View {
-        if let avatar = localAvatar {
-            Image(uiImage: avatar)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 32, height: 32)
-        } else if let iconUrl = usercfgs?.icon,
-           !iconUrl.isEmpty,
-           let url = URL(string: iconUrl) {
-            WebImage(url: url)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 32, height: 32)
-        } else {
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(
-                        colors: [.accentBlue, .accentBlueDark],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                Image(systemName: "person.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-            }
-        }
-    }
-}
 
 // MARK: - Profile Header Card
 
@@ -528,7 +512,7 @@ private struct ProfileQuickActions: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("工具")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.textTertiary)
+                .relayWallpaperAwareForeground(.textTertiary, secondary: true)
                 .padding(.horizontal, 4)
 
             VStack(spacing: 0) {
@@ -568,7 +552,7 @@ private struct ProfileOtherSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("其他")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.textTertiary)
+                .relayWallpaperAwareForeground(.textTertiary, secondary: true)
                 .padding(.horizontal, 4)
 
             VStack(spacing: 0) {
@@ -695,7 +679,7 @@ private struct ProfileBackupSection: View {
             HStack {
                 Text("备份")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.textTertiary)
+                    .relayWallpaperAwareForeground(.textTertiary, secondary: true)
 
                 Spacer()
 
@@ -1040,7 +1024,7 @@ private struct ProfileVersionFooter: View {
     var body: some View {
         Text("Relay v\(version) (\(build))")
             .font(.system(size: 12))
-            .foregroundColor(.textTertiary)
+            .relayWallpaperAwareForeground(.textTertiary, secondary: true)
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
     }

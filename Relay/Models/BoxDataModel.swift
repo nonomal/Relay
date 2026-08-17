@@ -378,9 +378,76 @@ extension UserConfig {
         case "gist_cache_key":
             guard let v = value as? [String] else { return nil }
             return with(gist_cache_key: v)
+        case "bgimg":
+            guard let v = value as? String else { return nil }
+            return with(bgimg: v)
+        case "bgimgs":
+            guard let v = value as? String else { return nil }
+            return with(bgimgs: v)
+        case "isWallpaperMode":
+            guard let v = value as? Bool else { return nil }
+            return with(isWallpaperMode: v)
         default:
             return nil
         }
+    }
+}
+
+/// 壁纸清单里的一项。BoxJS 用 `usercfgs.bgimgs` 存储，格式为
+/// `名字,链接` 每行一条，其中 `无,`（空链接）表示关闭壁纸。
+struct WallpaperOption: Identifiable, Equatable {
+    let name: String
+    /// 存进 `bgimg` 的值：图片地址，或 `跟随系统` 这类哨兵值
+    let value: String
+
+    var id: String { "\(name)\u{1}\(value)" }
+
+    /// BoxJS 用 `跟随系统` 作为哨兵，表示按深浅色分别取清单里的
+    /// `light` / `dark` 两项，而不是把它本身当图片地址请求。
+    static let systemSentinel = "跟随系统"
+
+    var isSystemFollow: Bool { value == Self.systemSentinel }
+
+    /// 仅当它是真实图片地址时才可用于预览/加载
+    var imageURL: URL? {
+        guard !isSystemFollow, let url = URL(string: value) else { return nil }
+        return url
+    }
+}
+
+extension UserConfig {
+    /// 解析 `bgimgs` 清单；跳过「无」这类空值项，由 UI 单独提供关闭入口
+    var wallpaperOptions: [WallpaperOption] {
+        guard let raw = bgimgs, !raw.isEmpty else { return [] }
+        var seen = Set<String>()
+        return raw.components(separatedBy: .newlines).compactMap { line -> WallpaperOption? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            // 只按第一个逗号切分，链接本身可能含逗号
+            let parts = trimmed.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+            let name = parts.first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
+            let value = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : ""
+            guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+            return WallpaperOption(name: name.isEmpty ? value : name, value: value)
+        }
+    }
+
+    /// 按名字取清单项的地址，供「跟随系统」解析 `light` / `dark` 使用
+    private func wallpaperValue(named name: String) -> String? {
+        wallpaperOptions.first { $0.name.caseInsensitiveCompare(name) == .orderedSame && !$0.isSystemFollow }?.value
+    }
+
+    /// 解析出当前实际要显示的壁纸地址。
+    /// `bgimg` 为 `跟随系统` 时按深浅色取清单里的 `dark` / `light` 项。
+    func resolvedWallpaperURL(isDark: Bool) -> URL? {
+        guard let bgimg, !bgimg.isEmpty else { return nil }
+        guard bgimg != WallpaperOption.systemSentinel else {
+            let preferred = isDark ? "dark" : "light"
+            let fallback = isDark ? "light" : "dark"
+            guard let value = wallpaperValue(named: preferred) ?? wallpaperValue(named: fallback) else { return nil }
+            return URL(string: value)
+        }
+        return URL(string: bgimg)
     }
 }
 
@@ -534,11 +601,6 @@ struct BoxDataResp: Codable {
             }
         }
         return favapps
-    }
-    
-    var bgImgUrl: String? {
-        guard let bgimg = usercfgs?.bgimg, !bgimg.isEmpty else { return nil }
-        return bgimg
     }
     
     func loadAppDataInfo(for app: AppModel) -> AppDataInfo {

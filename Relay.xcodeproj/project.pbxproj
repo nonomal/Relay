@@ -13,7 +13,6 @@
 		A100000100000001000000C1 /* SubGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000100000001000000C2 /* SubGridView.swift */; };
 		A100000100000001000000A1 /* AppIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000100000001000000A2 /* AppIconView.swift */; };
 		A100000100000001000000B1 /* AppGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000100000001000000B2 /* AppGridView.swift */; };
-		A100000100000001000000D1 /* RelayNavBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000100000001000000D2 /* RelayNavBar.swift */; };
 		A100000100000001000000E1 /* RelayRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000100000001000000E2 /* RelayRouter.swift */; };
 		A100000100000001000000F1 /* RelayTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000100000001000000F2 /* RelayTabBar.swift */; };
 		A10000010000000100000101 /* RelayGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000102 /* RelayGlass.swift */; };
@@ -21,6 +20,12 @@
 		A10000010000000100000113 /* MeshTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000114 /* MeshTransform.swift */; };
 		A100000200000001000000A1 /* SwipeActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000200000001000000A2 /* SwipeActionRow.swift */; };
 		A100000300000001000000A1 /* BoxJSInstallGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000300000001000000A2 /* BoxJSInstallGuideView.swift */; };
+		AA00000100000007000000A1 /* WallpaperPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000007000000A2 /* WallpaperPickerView.swift */; };
+		A10000010000000100000122 /* RelayPageBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000124 /* RelayPageBackground.swift */; };
+		A10000010000000100000162 /* RelayNavigationBarLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000164 /* RelayNavigationBarLayer.swift */; };
+		A10000010000000100000152 /* RelayNavigationBarContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000154 /* RelayNavigationBarContent.swift */; };
+		A10000010000000100000142 /* RelayNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000144 /* RelayNavigationBar.swift */; };
+		A10000010000000100000132 /* EdgeFadeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000134 /* EdgeFadeBar.swift */; };
 		AA00000100000001000000A1 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000001000000A2 /* ProfileView.swift */; };
 		AA00000100000002000000A1 /* DataViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000002000000A2 /* DataViewerView.swift */; };
 		AA00000100000003000000A1 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000003000000A2 /* SearchView.swift */; };
@@ -39,6 +44,7 @@
 		E24439762F92949F000E352F /* AnyCodable in Frameworks */ = {isa = PBXBuildFile; productRef = E24439752F92949F000E352F /* AnyCodable */; };
 		E24439782F92949F000E352F /* Moya in Frameworks */ = {isa = PBXBuildFile; productRef = E24439772F92949F000E352F /* Moya */; };
 		B0A0000100000004000000T3 /* Transmission in Frameworks */ = {isa = PBXBuildFile; productRef = B0A0000100000004000000T2 /* Transmission */; };
+		B0A0000100000005000000D3 /* DominantColors in Frameworks */ = {isa = PBXBuildFile; productRef = B0A0000100000005000000D2 /* DominantColors */; };
 		E244397A2F92949F000E352F /* SDWebImageSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = E24439792F92949F000E352F /* SDWebImageSwiftUI */; };
 		E24439B02F9294A0000E352F /* BoxDataModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E9E2602C46200D00836E4B /* BoxDataModel.swift */; };
 		E24439B12F9294A0000E352F /* BoxJsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E9E2552C4101AC00836E4B /* BoxJsViewModel.swift */; };
@@ -48,6 +54,7 @@
 		E24439B52F9294A0000E352F /* EnvScriptLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0A0000100000004000000A2 /* EnvScriptLoader.swift */; };
 		E24439B62F9294A0000E352F /* ApiManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E210FCEE2CBF6DC7004A8CFB /* ApiManager.swift */; };
 		E24439B72F9294A0000E352F /* ToastManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E8BA842C6CA43300C2AF9E /* ToastManager.swift */; };
+		A10000010000000100000172 /* WallpaperPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000100000174 /* WallpaperPalette.swift */; };
 		E24439B82F9294A0000E352F /* LogManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000010000000000000002 /* LogManager.swift */; };
 		E24439B92F9294A0000E352F /* ArrayExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E9E2632C464CC300836E4B /* ArrayExtension.swift */; };
 		E24439D02F9294A0000E352F /* PlatformBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24439C02F9294A0000E352F /* PlatformBridge.swift */; };
@@ -91,7 +98,6 @@
 		52B08C59053C5B3B08E9FEE8 /* AvatarStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarStorage.swift; sourceTree = "<group>"; };
 		A100000100000001000000A2 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 		A100000100000001000000B2 /* AppGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGridView.swift; sourceTree = "<group>"; };
-		A100000100000001000000D2 /* RelayNavBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayNavBar.swift; sourceTree = "<group>"; };
 		A100000100000001000000E2 /* RelayRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayRouter.swift; sourceTree = "<group>"; };
 		A100000100000001000000F2 /* RelayTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayTabBar.swift; sourceTree = "<group>"; };
 		A10000010000000100000102 /* RelayGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayGlass.swift; sourceTree = "<group>"; };
@@ -99,10 +105,16 @@
 		A10000010000000100000114 /* MeshTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Relay/Vendor/MeshTransform/MeshTransform.swift; sourceTree = SOURCE_ROOT; };
 		A100000200000001000000A2 /* SwipeActionRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeActionRow.swift; sourceTree = "<group>"; };
 		A100000300000001000000A2 /* BoxJSInstallGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxJSInstallGuideView.swift; sourceTree = "<group>"; };
+		A10000010000000100000124 /* RelayPageBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayPageBackground.swift; sourceTree = "<group>"; };
+		A10000010000000100000164 /* RelayNavigationBarLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayNavigationBarLayer.swift; sourceTree = "<group>"; };
+		A10000010000000100000154 /* RelayNavigationBarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayNavigationBarContent.swift; sourceTree = "<group>"; };
+		A10000010000000100000144 /* RelayNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayNavigationBar.swift; sourceTree = "<group>"; };
+		A10000010000000100000134 /* EdgeFadeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeFadeBar.swift; sourceTree = "<group>"; };
 		AA00000100000001000000A2 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		AA00000100000002000000A2 /* DataViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataViewerView.swift; sourceTree = "<group>"; };
 		AA00000100000003000000A2 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		AA00000100000004000000A2 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		AA00000100000007000000A2 /* WallpaperPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperPickerView.swift; sourceTree = "<group>"; };
 		AA00000100000005000000A2 /* ScriptEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptEditorView.swift; sourceTree = "<group>"; };
 		AA00000100000006000000A2 /* SearchTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchTabView.swift; sourceTree = "<group>"; };
 		B0A0000100000001000000A2 /* BoxJSAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxJSAPI.swift; sourceTree = "<group>"; };
@@ -128,6 +140,7 @@
 		E2C273672C36BB88004952AA /* SubcribeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubcribeView.swift; sourceTree = "<group>"; };
 		E2E8BA812C6B67BB00C2AF9E /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
 		E2E8BA842C6CA43300C2AF9E /* ToastManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastManager.swift; sourceTree = "<group>"; };
+		A10000010000000100000174 /* WallpaperPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperPalette.swift; sourceTree = "<group>"; };
 		E2E8BA862C6CA46400C2AF9E /* GlobalToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalToastView.swift; sourceTree = "<group>"; };
 		E2E9E24F2C3FE9A800836E4B /* Vibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vibration.swift; sourceTree = "<group>"; };
 		E2E9E2512C40FD5000836E4B /* ApiRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApiRequest.swift; sourceTree = "<group>"; };
@@ -170,6 +183,7 @@
 				E2E9E2592C45072F00836E4B /* AnyCodable in Frameworks */,
 				E2E9E2472C3FCA9D00836E4B /* Alamofire in Frameworks */,
 				B0A0000100000004000000T3 /* Transmission in Frameworks */,
+				B0A0000100000005000000D3 /* DominantColors in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -233,6 +247,7 @@
 				E210FCEE2CBF6DC7004A8CFB /* ApiManager.swift */,
 				F10000010000000000000002 /* LogManager.swift */,
 				E2E8BA842C6CA43300C2AF9E /* ToastManager.swift */,
+				A10000010000000100000174 /* WallpaperPalette.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -327,6 +342,7 @@
 				F1FEED0100000000000000A2 /* FeedbackMail.swift */,
 				F10000020000000000000002 /* LogViewerView.swift */,
 				AA00000100000004000000A2 /* PreferencesView.swift */,
+				AA00000100000007000000A2 /* WallpaperPickerView.swift */,
 				F10000030000000000000002 /* BackupDetailView.swift */,
 				F10000040000000000000002 /* VersionHistoryView.swift */,
 				F10000050000000000000002 /* AcknowledgementsView.swift */,
@@ -352,14 +368,18 @@
 				E210432B2C90307000347C43 /* CheckBoxGroup.swift */,
 				A100000100000001000000A2 /* AppIconView.swift */,
 				A100000100000001000000B2 /* AppGridView.swift */,
-				A100000100000001000000D2 /* RelayNavBar.swift */,
-				A100000100000001000000E2 /* RelayRouter.swift */,
+						A100000100000001000000E2 /* RelayRouter.swift */,
 				A100000100000001000000F2 /* RelayTabBar.swift */,
 				A10000010000000100000102 /* RelayGlass.swift */,
 				A10000010000000100000112 /* GenerateMesh.swift */,
 				A10000010000000100000114 /* MeshTransform.swift */,
 				A100000200000001000000A2 /* SwipeActionRow.swift */,
 				A100000300000001000000A2 /* BoxJSInstallGuideView.swift */,
+				A10000010000000100000124 /* RelayPageBackground.swift */,
+				A10000010000000100000164 /* RelayNavigationBarLayer.swift */,
+				A10000010000000100000154 /* RelayNavigationBarContent.swift */,
+				A10000010000000100000144 /* RelayNavigationBar.swift */,
+				A10000010000000100000134 /* EdgeFadeBar.swift */,
 				CFCC095ECB1ADA8B83A01BDA /* PhotoPicker.swift */,
 			);
 			path = Components;
@@ -414,6 +434,7 @@
 				B0A0000100000003000000A2 /* Moya */,
 				E2E9E2782C4FE81800836E4B /* SDWebImageSwiftUI */,
 				B0A0000100000004000000T2 /* Transmission */,
+				B0A0000100000005000000D2 /* DominantColors */,
 			);
 			productName = Relay;
 			productReference = E2C273522C354F4A004952AA /* Relay.app */;
@@ -453,6 +474,7 @@
 				E2E9E2772C4FE81700836E4B /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */,
 				E35500032FA0000000E352F0 /* XCRemoteSwiftPackageReference "HighlighterSwift" */,
 				B0A0000100000004000000T1 /* XCRemoteSwiftPackageReference "Transmission" */,
+				B0A0000100000005000000D1 /* XCRemoteSwiftPackageReference "DominantColors" */,
 			);
 			productRefGroup = E2C273532C354F4A004952AA /* Products */;
 			projectDirPath = "";
@@ -525,14 +547,20 @@
 				E210432C2C90307000347C43 /* CheckBoxGroup.swift in Sources */,
 				A100000100000001000000A1 /* AppIconView.swift in Sources */,
 				A100000100000001000000B1 /* AppGridView.swift in Sources */,
-				A100000100000001000000D1 /* RelayNavBar.swift in Sources */,
-				A100000100000001000000E1 /* RelayRouter.swift in Sources */,
+						A100000100000001000000E1 /* RelayRouter.swift in Sources */,
 				A100000100000001000000F1 /* RelayTabBar.swift in Sources */,
 				A10000010000000100000101 /* RelayGlass.swift in Sources */,
 				A10000010000000100000111 /* GenerateMesh.swift in Sources */,
 				A10000010000000100000113 /* MeshTransform.swift in Sources */,
 				A100000200000001000000A1 /* SwipeActionRow.swift in Sources */,
 				A100000300000001000000A1 /* BoxJSInstallGuideView.swift in Sources */,
+				AA00000100000007000000A1 /* WallpaperPickerView.swift in Sources */,
+				A10000010000000100000122 /* RelayPageBackground.swift in Sources */,
+				A10000010000000100000172 /* WallpaperPalette.swift in Sources */,
+				A10000010000000100000162 /* RelayNavigationBarLayer.swift in Sources */,
+				A10000010000000100000152 /* RelayNavigationBarContent.swift in Sources */,
+				A10000010000000100000142 /* RelayNavigationBar.swift in Sources */,
+				A10000010000000100000132 /* EdgeFadeBar.swift in Sources */,
 				E2C273682C36BB88004952AA /* SubcribeView.swift in Sources */,
 				364D296303964521B29BE952 /* SubDetailView.swift in Sources */,
 				A100000100000001000000C1 /* SubGridView.swift in Sources */,
@@ -891,6 +919,14 @@
 				minimumVersion = 2.14.4;
 			};
 		};
+		B0A0000100000005000000D1 /* XCRemoteSwiftPackageReference "DominantColors" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/DenDmitriev/DominantColors";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.0;
+			};
+		};
 		E2E9E2452C3FCA9D00836E4B /* XCRemoteSwiftPackageReference "Alamofire" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Alamofire/Alamofire";
@@ -955,6 +991,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B0A0000100000004000000T1 /* XCRemoteSwiftPackageReference "Transmission" */;
 			productName = Transmission;
+		};
+		B0A0000100000005000000D2 /* DominantColors */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B0A0000100000005000000D1 /* XCRemoteSwiftPackageReference "DominantColors" */;
+			productName = DominantColors;
 		};
 		E2E9E2462C3FCA9D00836E4B /* Alamofire */ = {
 			isa = XCSwiftPackageProductDependency;

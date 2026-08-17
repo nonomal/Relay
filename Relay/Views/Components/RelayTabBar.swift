@@ -133,7 +133,8 @@ struct RelayTabBar: View {
         } label: {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 20, weight: .medium))
-                .foregroundColor(NEBoxTabBarPalette.unselected)
+                // 与 tab 项同色（见 RelayTabButton）——非选中灰在壁纸上读不出来。
+                .foregroundColor(NEBoxTabBarPalette.selected)
                 .frame(width: barHeight, height: barHeight)
                 .contentShape(Rectangle())
         }
@@ -164,11 +165,13 @@ private struct RelayTabButton: View {
     let isSelected: Bool
 
     var body: some View {
+        // 全部项都用选中色：壁纸模式下非选中的灰蓝压在玻璃上几乎读不出来。
+        // 选中态改由背后的胶囊表达，而不是靠颜色深浅区分。
         VStack(spacing: 4) {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: isSelected ? item.selectedIcon : item.icon)
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(isSelected ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
+                    .foregroundColor(NEBoxTabBarPalette.selected)
                     // Reserve the badge's overhang so it is never clipped.
                     .frame(width: 28, height: 24)
 
@@ -179,16 +182,30 @@ private struct RelayTabButton: View {
                 }
             }
 
+            // `kerning` before the foreground modifier: on `Text` it is iOS 15-safe,
+            // but the `View` overload requires iOS 16.
             Text(item.title)
                 .font(.system(size: 10, weight: isSelected ? .bold : .medium))
-                .foregroundColor(isSelected ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
                 .kerning(0.5)
+                .foregroundColor(NEBoxTabBarPalette.selected)
         }
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
+        .background(selectionCapsule)
         .contentShape(Rectangle())
         .animation(.easeInOut(duration: 0.15), value: item.badge)
         .accessibilityLabel(item.title)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// 选中态的胶囊底：选中色的淡染，压在玻璃上也读得出来。
+    @ViewBuilder
+    private var selectionCapsule: some View {
+        if isSelected {
+            Capsule(style: .continuous)
+                .fill(NEBoxTabBarPalette.selected.opacity(0.16))
+                .padding(.horizontal, 6)
+        }
     }
 }
 

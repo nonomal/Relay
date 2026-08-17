@@ -45,7 +45,6 @@ struct HomeView: View {
     @State var items: [AppModel] = []
     @StateObject private var router = RelayRouter()
     @State private var isEditMode: Bool = false
-    @State private var isScrolled: Bool = false
 
     private var activeEnv: String? { boxModel.boxData.syscfgs?.env }
     private var availableEnvs: [SysEnv] { boxModel.boxData.syscfgs?.envs ?? [] }
@@ -53,21 +52,15 @@ struct HomeView: View {
     var body: some View {
         neboxNavigationContainer {
             ZStack(alignment: .top) {
-                // Gradient background
-                LinearGradient(
-                    colors: Color.pageGradientColors,
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                RelayPageBackground()
 
-                VStack(spacing: 0) {
-                    navBar
-
+                Group {
                     if !boxModel.isDataLoaded {
-                        Spacer()
-                        ProgressView().scaleEffect(1.2)
-                        Spacer()
+                        VStack {
+                            Spacer()
+                            ProgressView().scaleEffect(1.2)
+                            Spacer()
+                        }
                     } else if !boxModel.favApps.isEmpty {
                         AppGridView(
                             items: $items,
@@ -76,8 +69,7 @@ struct HomeView: View {
                             isEditMode: $isEditMode,
                             destination: { app in
                                 AnyView(AppDetailView(app: app))
-                            },
-                            onScrolled: $isScrolled
+                            }
                         )
                     } else {
                         emptyStateView
@@ -88,51 +80,51 @@ struct HomeView: View {
                 .onReceive(boxModel.$favApps) { favApps in
                     items = favApps
                 }
-
             }
             // Destination is attached per-cell inside `AppGridView` so the zoom
             // transition originates from the tapped icon.
-            .neboxHiddenNavigationBar()
+            //
+            // 沉浸式导航栏：tab 根页走 `.plain` — 系统栏保留（右上角按钮仍是系统
+            // ToolbarItem，保住 Liquid Glass 胶囊与热区），栏背景换成常驻的手绘
+            // 渐隐条，内容从栏下「化开」。tint 跟着页面背景走：有壁纸时用壁纸自身
+            // 的洗层色调没有意义，仍取渐变顶色即可（渐隐条是半透明的色洗层）。
+            //
+            // `ownsScrollEdge: false`：真正的 ScrollView 在 `AppGridView` 内部，
+            // 不是这一层。渐隐条仍只画一份在这里，压制系统边缘效果则由那个
+            // ScrollView 自己挂 `.navigationBarScrollEdge()`（挂到非滚动容器上会
+            // 静默失效）。
+            .navigationBar(.init(
+                chrome: .plain(background: .gradientTop, ownsScrollEdge: false),
+                title: .none
+            ))
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { openProxyApp() } label: {
+                        toolAvatarView
+                            .frame(width: 32, height: 32)
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if !boxModel.favApps.isEmpty {
+                        Button {
+                            isEditMode.toggle()
+                        } label: {
+                            Image(systemName: isEditMode
+                                  ? "checkmark.circle"
+                                  : "circle.grid.2x2")
+                                .font(.system(size: 17, weight: .medium))
+                        }
+                        .accessibilityLabel(isEditMode ? "完成" : "编辑")
+                    }
+                }
+            }
         }
         .neboxLiquidGlassTabBarChrome()
     }
 
-    // MARK: - Nav Bar
-
-    private var navBar: some View {
-        RelayNavBar(isScrolled: isScrolled) {
-            // Left: current tool indicator, tap to open the app
-            Button {
-                openProxyApp()
-            } label: {
-                toolAvatarView
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        } trailing: {
-            // Right: edit / search
-            HStack(spacing: 16) {
-                if !boxModel.favApps.isEmpty {
-                    Button {
-                        isEditMode.toggle()
-                    } label: {
-                        Text(isEditMode ? "完成" : "编辑")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(.accent)
-                    }
-                }
-                Button {
-                    onSearch()
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundColor(.accent)
-                }
-            }
-        }
-    }
 
     @ViewBuilder
     private var toolAvatarView: some View {
@@ -177,9 +169,9 @@ struct HomeView: View {
             Spacer()
             Image(systemName: "square.grid.2x2")
                 .font(.system(size: 48))
-                .foregroundColor(.textSecondary.opacity(0.4))
+                .relayWallpaperAwareForeground(.textSecondary.opacity(0.4))
             Text("还没有收藏应用")
-                .foregroundColor(.textSecondary.opacity(0.7))
+                .relayWallpaperAwareForeground(.textSecondary.opacity(0.7))
             Button {
                 onSearch()
             } label: {

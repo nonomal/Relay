@@ -105,6 +105,15 @@ struct PreferencesView: View {
         IconAppearance(rawValue: iconAppearanceRaw) ?? .auto
     }
 
+    /// 优先显示壁纸在 BoxJs 清单里的名字，自定义地址则显示「自定义」
+    private var wallpaperSummary: String {
+        guard let bgimg = usercfgs?.bgimg, !bgimg.isEmpty else { return "无" }
+        if let match = usercfgs?.wallpaperOptions.first(where: { $0.value == bgimg }) {
+            return match.name
+        }
+        return "自定义"
+    }
+
     var body: some View {
         Form {
             Section(header: Text("通知")) {
@@ -131,6 +140,18 @@ struct PreferencesView: View {
                         Spacer()
                         Text(currentAppearance.displayName)
                             .foregroundColor(.secondary)
+                    }
+                }
+                NavigationLink {
+                    WallpaperPickerView()
+                } label: {
+                    HStack {
+                        Text("壁纸")
+                        Spacer()
+                        Text(wallpaperSummary)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
             }

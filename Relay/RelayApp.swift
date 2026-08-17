@@ -53,6 +53,10 @@ struct RelayApp: App {
                 .environmentObject(apiManager)
                 .environmentObject(toastManager)
                 .environmentObject(boxModel)
+                // Also injected as a plain environment value so views presented
+                // in sheets (which may not inherit environment objects) can read
+                // it optionally — see `RelayPageBackground`.
+                .environment(\.relayBoxModel, boxModel)
                 .overlay {
                     GlobalLoadingOverlay(toastManager: toastManager)
                 }

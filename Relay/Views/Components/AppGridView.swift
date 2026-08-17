@@ -23,6 +23,9 @@ struct AppGridView: View {
     @Binding var isEditMode: Bool
 
     var bottomInset: CGFloat = adaptiveBottomInset()
+    /// 首行与导航栏之间的留白。首页（栏上无标题）用默认 24；订阅详情那类
+    /// 带标题的页面要小一些，否则首行离栏太远。
+    var topInset: CGFloat = 24
     /// When false the grid is read-only: no long-press edit, no reordering.
     var allowsEdit: Bool = true
     /// Replaces the default "navigate to detail" tap behaviour.
@@ -34,15 +37,6 @@ struct AppGridView: View {
     /// Transmission's zoom transition originates from that cell's frame rather than
     /// from the whole page.
     var destination: ((AppModel) -> AnyView)? = nil
-    /// Set to true once content scrolls under the nav bar, so the bar can show its
-    /// separator. Defaults to a throwaway binding for callers that don't care.
-    var onScrolled: Binding<Bool> = .constant(false)
-
-    private var onScrolledState: Bool {
-        get { onScrolled.wrappedValue }
-        nonmutating set { onScrolled.wrappedValue = newValue }
-    }
-
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
 
     var body: some View {
@@ -54,20 +48,21 @@ struct AppGridView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 24)
+                .padding(.top, topInset)
                 .padding(.bottom, bottomInset)
-                .relayScrollOffsetReporter()
+                // `.reveal` 标题在 iOS 17 的滚动量来源（18+ 走官方
+                // onScrollGeometryChange，挂着也无害）。没有它，用网格模式的
+                // 详情页在 iOS 17 上标题永远不浮现。
+                .navigationBarScrollSource()
             }
+            // 压制 iOS 26 系统 scroll edge effect：必须直接挂在 ScrollView 上，
+            // 挂到外层容器会静默失效（页面那层传的是 ownsScrollEdge: false）。
+            .navigationBarScrollEdge()
             // Re-tapping the active tab scrolls back to the top (Telegram behaviour).
             .onReceive(NotificationCenter.default.publisher(for: .relayTabReselected)) { _ in
                 guard let first = items.first else { return }
                 withAnimation { proxy.scrollTo(first.id, anchor: .top) }
             }
-        }
-        .coordinateSpace(name: RelayScroll.space)
-        .onPreferenceChange(RelayScrollOffsetKey.self) { minY in
-            let scrolled = minY < -2
-            if scrolled != onScrolledState { onScrolledState = scrolled }
         }
         .neboxDismissKeyboardOnScroll()
         .refreshable {
@@ -288,7 +283,7 @@ private struct AppGridCell: View {
 
             Text(app.name)
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundColor(.textSecondary)
+                .relayWallpaperAwareForeground(.textSecondary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
         }

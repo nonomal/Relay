@@ -27,7 +27,6 @@ struct SubGridView: View {
     /// Transmission's zoom morphs out of that card rather than the whole page.
     var destination: ((AppSubSummary) -> AnyView)? = nil
     /// Set once content scrolls under the nav bar, so it can show its separator.
-    var onScrolled: Binding<Bool> = .constant(false)
 
     @Environment(\.openURL) private var openURL
 
@@ -48,18 +47,14 @@ struct SubGridView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
                 .padding(.bottom, adaptiveBottomInset())
-                .relayScrollOffsetReporter()
             }
+            // 压制 iOS 26 系统 scroll edge effect：必须直接挂在 ScrollView 上。
+            .navigationBarScrollEdge()
             // Re-tapping the active tab scrolls back to the top (Telegram behaviour).
             .onReceive(NotificationCenter.default.publisher(for: .relayTabReselected)) { _ in
                 guard let first = items.first else { return }
                 withAnimation { proxy.scrollTo(first.id, anchor: .top) }
             }
-        }
-        .coordinateSpace(name: RelayScroll.space)
-        .onPreferenceChange(RelayScrollOffsetKey.self) { minY in
-            let scrolled = minY < -2
-            if scrolled != onScrolled.wrappedValue { onScrolled.wrappedValue = scrolled }
         }
         .refreshable {
             await boxModel.reloadAllAppSub()

@@ -196,7 +196,9 @@ struct ContentView: View {
                     }
             }
         }
-        .background(Color.gradientBottom.ignoresSafeArea(edges: .bottom))
+        .relayWallpaperAwareBackground {
+            Color.gradientBottom.ignoresSafeArea(edges: .bottom)
+        }
         .onChange(of: selectedTab) { _ in
             Task {
                 await boxModel.flushPendingDataUpdates()

@@ -11,7 +11,6 @@ struct SubcribeView: View {
     @EnvironmentObject var toastManager: ToastManager
     @State private var items: [AppSubSummary] = []
     @State private var isEditMode: Bool = false
-    @State private var isScrolled: Bool = false
     @State private var showAddAlert: Bool = false
     @State private var addUrlInput: String = ""
     @State private var showAddOptions: Bool = false
@@ -23,18 +22,9 @@ struct SubcribeView: View {
     var body: some View {
         neboxNavigationContainer {
             ZStack(alignment: .top) {
-                // Gradient background — matches HomeView
-                LinearGradient(
-                    colors: Color.pageGradientColors,
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                RelayPageBackground()
 
-                VStack(spacing: 0) {
-                    // Placeholder to push content below nav bar
-                    Color.clear.frame(height: 56)
-
+                Group {
                     if items.isEmpty {
                         emptyState
                     } else {
@@ -47,23 +37,45 @@ struct SubcribeView: View {
                             // of the tapped card rather than the whole page.
                             destination: { summary in
                                 AnyView(SubDetailView(subURL: summary.url))
-                            },
-                            onScrolled: $isScrolled
+                            }
                         )
                         .ignoresSafeArea(edges: .bottom)
                     }
                 }
-
-                // Nav bar always on top — solid background covers scrolled cells
-                VStack {
-                    navBar
-                        .background(Color.gradientTop.ignoresSafeArea())
-                    Spacer()
-                }
             }
             // Destination is attached per-card inside `SubGridView` so the zoom
             // originates from the tapped card.
-            .neboxHiddenNavigationBar()
+            //
+            // 沉浸式导航栏，同 HomeView：真正的 ScrollView 在 SubGridView 内部，
+            // 所以这层传 ownsScrollEdge: false。
+            .navigationBar(.init(
+                chrome: .plain(background: .gradientTop, ownsScrollEdge: false),
+                title: .fixed("应用订阅")
+            ))
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        Task {
+                            await boxModel.reloadAllAppSub()
+                            toastManager.showToast(message: "已刷新全部订阅")
+                        }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    Menu {
+                        Button(action: beginURLSubscription) {
+                            Label("输入订阅地址", systemImage: "link")
+                        }
+                        Button(action: beginPastedSubscription) {
+                            Label("粘贴 JSON 内容", systemImage: "doc.on.clipboard")
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .medium))
+                    }
+                }
+            }
         }
         .neboxLiquidGlassTabBarChrome()
         .alert("添加订阅", isPresented: $showAddAlert) {
@@ -106,61 +118,6 @@ struct SubcribeView: View {
         }
     }
 
-    // MARK: - Nav Bar
-
-    private var navBar: some View {
-        RelayNavBar(isScrolled: isScrolled) {
-            // Left: page identity (mirrors HomeView's tool switcher position)
-            HStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.bgMuted)
-                        .frame(width: 36, height: 36)
-                    Image(systemName: "square.stack.fill")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.accent)
-                }
-                Text("应用订阅")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.textPrimary)
-            }
-        } trailing: {
-            // Right: actions
-            HStack(spacing: 16) {
-                if !items.isEmpty {
-                    Button {
-                        isEditMode.toggle()
-                    } label: {
-                        Text(isEditMode ? "完成" : "编辑")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(.accent)
-                    }
-                }
-                Button {
-                    Task {
-                        await boxModel.reloadAllAppSub()
-                        toastManager.showToast(message: "已刷新全部订阅")
-                    }
-                } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.accent)
-                }
-                Menu {
-                    Button(action: beginURLSubscription) {
-                        Label("输入订阅地址", systemImage: "link")
-                    }
-                    Button(action: beginPastedSubscription) {
-                        Label("粘贴 JSON 内容", systemImage: "doc.on.clipboard")
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundColor(.accent)
-                }
-            }
-        }
-    }
 
     private func beginURLSubscription() {
         addUrlInput = ""
@@ -188,10 +145,10 @@ struct SubcribeView: View {
             VStack(spacing: 8) {
                 Text("暂无订阅")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.textPrimary)
+                    .relayWallpaperAwareForeground(.textPrimary)
                 Text("添加订阅源后，这里会展示所有应用")
                     .font(.system(size: 14))
-                    .foregroundColor(.textSecondary)
+                    .relayWallpaperAwareForeground(.textSecondary, secondary: true)
                     .multilineTextAlignment(.center)
             }
             Button {

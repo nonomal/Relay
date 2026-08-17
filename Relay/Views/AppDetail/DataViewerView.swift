@@ -107,12 +107,7 @@ struct DataViewerView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: Color.pageGradientColors,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            RelayPageBackground()
 
             ScrollView {
                 VStack(spacing: 16) {

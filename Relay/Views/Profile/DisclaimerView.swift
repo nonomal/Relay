@@ -39,12 +39,7 @@ struct DisclaimerView: View {
             .padding(20)
         }
         .background(
-            LinearGradient(
-                colors: Color.pageGradientColors,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            RelayPageBackground()
         )
         .navigationTitle("免责声明")
         .navigationBarTitleDisplayMode(.inline)

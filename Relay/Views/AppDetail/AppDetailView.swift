@@ -550,7 +550,17 @@ struct AppDetailView: View {
                 }
                 .neboxDismissKeyboardOnScroll()
                 .modifier(GroupedFormStyle())
-                .navigationTitle(app.name)
+                // Form 默认铺一层不透明的 systemGroupedBackground，会把壁纸整个盖掉。
+                // 掀掉它，改由 RelayPageBackground 打底（分组行自己的 bgCard 不受影响）。
+                .modifier(HideScrollContentBackground())
+                .background(RelayPageBackground())
+                // 沉浸式导航栏：push 进来的详情页，标题常显（页内没有替代性大标题
+                // ——头部卡片是图标 + 元信息，不是大字应用名）。这层就是承载滚动的
+                // Form，所以 ownsScrollEdge 用默认值。
+                .navigationBar(.init(
+                    chrome: .plain(background: .gradientTop),
+                    title: .fixed(app.name)
+                ))
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {

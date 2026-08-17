@@ -140,19 +140,6 @@ func neboxNavigationContainer<Content: View>(@ViewBuilder _ content: () -> Conte
 }
 
 extension View {
-    @ViewBuilder
-    func neboxHiddenNavigationBar() -> some View {
-        if #available(iOS 16.0, *) {
-            self
-                .toolbar(.hidden, for: .navigationBar)
-                .toolbarBackground(.hidden, for: .navigationBar)
-        } else {
-            self
-                .navigationBarTitle("", displayMode: .inline)
-                .navigationBarHidden(true)
-        }
-    }
-
     /// Pushes `destination` using Transmission's `DestinationLink` zoom transition.
     ///
     /// `.zoomIfAvailable` gives the real zoom on iOS 18+ and degrades to the default
