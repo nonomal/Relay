@@ -432,30 +432,54 @@ private struct ThemeColorSection: View {
     let hex: String
     let onPick: (String) -> Void
 
+    /// 拖动中的颜色由本地 state 持有，`ColorPicker` 直接绑它。
+    ///
+    /// 不能让 picker 绑「hex ↔ Color」的转换绑定：每个采样点都写回
+    /// `updateData` → 重置整个 `boxData` → 本页重建，picker 会被灌回量化后的
+    /// 十六进制值，和用户正在进行的手势打架（表现为颜色乱跳）。本地 state 让
+    /// 拖动全程连续，只在取值真的变化时才向上提交。
+    @State private var draft: Color?
+
     private var isDefault: Bool {
         hex.caseInsensitiveCompare(slot.fallback) == .orderedSame
     }
 
-    /// BoxJs 存的是十六进制串，`ColorPicker` 给的是 `Color`，在这里互转。
-    private var color: Binding<Color> {
+    private var selection: Binding<Color> {
         Binding(
-            get: { Color(hex: hex) },
-            set: { onPick($0.toHex()) }
+            get: { draft ?? Color(hex: hex) },
+            set: { newValue in
+                draft = newValue
+                // 只在量化后的十六进制真的变了才写；同一格内的连续采样不该
+                // 反复触发全局状态更新。
+                let newHex = newValue.toHex()
+                guard newHex.caseInsensitiveCompare(hex) != .orderedSame else { return }
+                onPick(newHex)
+            }
         )
     }
 
     var body: some View {
         Section {
-            ColorPicker(selection: color, supportsOpacity: false) {
+            ColorPicker(selection: selection, supportsOpacity: false) {
                 ThemeColorLabel(title: slot.title, hex: hex)
             }
 
             // 与网页版一致：给一个恢复出厂色的入口，避免只能靠手调回去
             if !isDefault {
-                Button("恢复默认") { onPick(slot.fallback) }
+                Button("恢复默认") {
+                    // 连带清掉草稿，否则 picker 还显示恢复前的颜色
+                    draft = nil
+                    onPick(slot.fallback)
+                }
             }
         } footer: {
             Text(slot.footer)
+        }
+        // 外部改了值（另一端写入 / 恢复默认 / 重新拉取配置）时丢弃草稿，
+        // 让 picker 回到真实存储值。
+        .onChange(of: hex) { newHex in
+            if let draft, draft.toHex().caseInsensitiveCompare(newHex) == .orderedSame { return }
+            self.draft = nil
         }
     }
 }

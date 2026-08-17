@@ -43,12 +43,18 @@ extension Color {
     }
 
     func toHex() -> String {
-        guard let components = UIColor(self).cgColor.components else { return "#000000" }
+        // ⚠️ 必须先转到 sRGB 再取分量，不能直接读 `cgColor.components`。
+        // 系统 `ColorPicker` 工作在 Display P3，`UIColor(Color)` 会**保留** P3 而不是
+        // 转换；P3 里的饱和色在 sRGB 口径下会落到 0–1 之外（实测琥珀色拿到
+        // `[1.013, 0.721, -0.254]`）。按原样 `*255` 格式化会吐出 `#102B8FFFFFFBF`
+        // 这种 13 位畸形串，再解析回来就是另一个颜色——表现为拖一个通道另外两个
+        // 通道乱跳。转换 + 夹取到 0–1 之后往返才稳定。
+        let srgb = UIColor(self).resolvedSRGBComponents
         // 四舍五入而非截断：`Int(0.733 * 255)` = 186 (BA)，而原色是 187 (BB)，
         // 每次经 ColorPicker 往返都会掉一格，主题色会慢慢漂移。
-        let r = Int(((components[safe: 0] ?? 0) * 255).rounded())
-        let g = Int(((components[safe: 1] ?? 0) * 255).rounded())
-        let b = Int(((components[safe: 2] ?? 0) * 255).rounded())
+        let r = Int((srgb.red * 255).rounded())
+        let g = Int((srgb.green * 255).rounded())
+        let b = Int((srgb.blue * 255).rounded())
         return String(format: "#%02X%02X%02X", r, g, b)
     }
 
@@ -94,6 +100,26 @@ extension Color {
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+extension UIColor {
+    /// RGB components converted into sRGB and clamped to 0–1.
+    ///
+    /// `getRed(_:green:blue:alpha:)` 已经会把颜色转到 sRGB 数值口径（对
+    /// Display P3 来源同样返回 true），比手工 `CGColorSpace` 转换省事；广色域
+    /// 色转过来可能略微越界，所以再夹一次。灰度/pattern 之类取不到分量时回落
+    /// 到黑色，与 `Color(hex:)` 的宽松语义一致。
+    var resolvedSRGBComponents: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
+        guard getRed(&r, green: &g, blue: &b, alpha: &a) else {
+            // 灰度色走 white 分量，别直接判黑
+            var w: CGFloat = 0
+            if getWhite(&w, alpha: &a) { return (w, w, w, a) }
+            return (0, 0, 0, 1)
+        }
+        func clamp(_ v: CGFloat) -> CGFloat { min(max(v, 0), 1) }
+        return (clamp(r), clamp(g), clamp(b), clamp(a))
     }
 }
 
