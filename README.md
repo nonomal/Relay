@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/platform-iOS_15+-blue" />
   <img src="https://img.shields.io/badge/swift-5.0-orange" />
   <img src="https://img.shields.io/badge/version-1.0.1-green" />
-  <img src="https://img.shields.io/badge/license-MIT-lightgrey" />
+  <img src="https://img.shields.io/badge/license-GPL--2.0-lightgrey" />
 </p>
 
 ## 功能特性
@@ -143,4 +143,9 @@ Relay 通过 REST API 与 BoxJS 后端通信：
 
 ## License
 
-MIT
+GPL-2.0
+
+本项目包含基于 [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS)（GPL-2.0）
+实现的代码 —— 具体为 `Relay/Views/Components/RelayGlass.swift` 中的玻璃背景层，
+参考自 `submodules/TelegramUI/Components/GlassBackgroundComponent`。
+因 GPL-2.0 的传染性，本项目整体采用 GPL-2.0 授权（原为 MIT）。

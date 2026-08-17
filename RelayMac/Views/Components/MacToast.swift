@@ -43,15 +43,23 @@ struct MacToast: View {
 
     @ViewBuilder
     private var background: some View {
+        // `glassEffect` only exists in the macOS 26 SDK (Xcode 26 / Swift 6.2), so it
+        // needs the compile-time guard in addition to the runtime `#available`.
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
-            Capsule(style: .continuous)
-                .fill(.regularMaterial)
+            legacyCapsule
                 .glassEffect(.regular, in: .capsule)
-                .shadow(color: .black.opacity(0.15), radius: 16, y: 4)
         } else {
-            Capsule(style: .continuous)
-                .fill(.regularMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 16, y: 4)
+            legacyCapsule
         }
+        #else
+        legacyCapsule
+        #endif
+    }
+
+    private var legacyCapsule: some View {
+        Capsule(style: .continuous)
+            .fill(.regularMaterial)
+            .shadow(color: .black.opacity(0.15), radius: 16, y: 4)
     }
 }

@@ -3,7 +3,6 @@
 //  NEBox
 
 import SwiftUI
-import UIKit
 import SDWebImageSwiftUI
 
 private enum SubDetailLayoutMode: String {
@@ -23,9 +22,8 @@ struct SubDetailView: View {
     @AppStorage(SubDetailLayoutMode.userDefaultsKey) private var layoutModeRaw: String = SubDetailLayoutMode.grid.rawValue
 
     @State private var items: [AppModel] = []
-    @State private var selectedApp: AppModel?
-    @State private var isNavigationActive: Bool = false
-    @Namespace private var appNavigationNamespace
+    @StateObject private var router = RelayRouter()
+    @State private var isScrolled: Bool = false
 
     /// Derived from boxData on appear / change — only the header fields, no apps array.
     @State private var subName: String = ""
@@ -60,42 +58,20 @@ struct SubDetailView: View {
                     }
                 } else if isListMode {
                     appListView
-                } else if #available(iOS 18.0, *) {
-                    appGridView
                 } else {
-                    CollectionViewWrapper(
-                        items: $items,
-                        boxModel: boxModel,
-                        selectedApp: $selectedApp,
-                        isNavigationActive: $isNavigationActive,
-                        isEditMode: .constant(false),
-                        bottomInset: adaptiveBottomInset(),
-                        allowsEdit: false,
-                        favAppIds: Set(boxModel.favApps.map { $0.id }),
-                        contextMenuProvider: { app in
-                            favContextMenu(for: app)
-                        }
-                    )
-                    .ignoresSafeArea(edges: .bottom)
+                    appGridView
                 }
             }
 
-            // Nav bar on top
+            // Nav bar on top — opaque, so grid content scrolls cleanly underneath.
             VStack {
                 navBar
-                    .background(Color.gradientTop.ignoresSafeArea())
                 Spacer()
             }
         }
         .neboxHiddenNavigationBar()
         .background(Color.gradientBottom.ignoresSafeArea(edges: .bottom))
-        .neboxNavigationDestination(isPresented: $isNavigationActive) {
-            AppDetailView(app: selectedApp)
-                .neboxZoomNavigationTransition(
-                    sourceID: selectedApp?.id,
-                    in: appNavigationNamespace
-                )
-        }
+        // Destinations are attached per-cell/row so the zoom originates there.
         .onAppear { loadSubDetail() }
         .onDisappear {
             Task {
@@ -116,45 +92,18 @@ struct SubDetailView: View {
     // MARK: - Nav Bar
 
     private var navBar: some View {
-        HStack(spacing: 0) {
-            // Back button + subscription avatar + name
-            Button {
-                dismiss()
-            } label: {
+        RelayNavBar(isScrolled: isScrolled) {
+            RelayBackButton(action: { dismiss() }) {
                 HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.accent)
-
-                    if !subIcon.isEmpty, let iconURL = URL(string: subIcon) {
-                        WebImage(url: iconURL) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            Text(String(subName.prefix(1)))
-                                .font(.system(size: 28 * 0.42, weight: .semibold, design: .rounded))
-                                .foregroundColor(.textSecondary)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .background(Color.bgMuted)
-                        }
-                        .frame(width: 28, height: 28)
-                        .clipShape(Circle())
-                    } else if !subName.isEmpty {
-                        Text(String(subName.prefix(1)))
-                            .font(.system(size: 28 * 0.42, weight: .semibold, design: .rounded))
-                            .foregroundColor(.textSecondary)
-                            .frame(width: 28, height: 28)
-                            .background(Color.bgMuted, in: Circle())
-                    }
+                    subAvatar
 
                     Text(subName)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.textPrimary)
                         .lineLimit(1)
                 }
             }
-
-            Spacer()
-
+        } trailing: {
             HStack(spacing: 14) {
                 // Layout toggle
                 Button {
@@ -175,8 +124,31 @@ struct SubDetailView: View {
                     .foregroundColor(.textTertiary)
             }
         }
-        .frame(height: 56)
-        .padding(.horizontal, 20)
+    }
+
+    @ViewBuilder
+    private var subAvatar: some View {
+        if !subIcon.isEmpty, let iconURL = URL(string: subIcon) {
+            WebImage(url: iconURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                subAvatarFallback
+            }
+            .frame(width: 28, height: 28)
+            .clipShape(Circle())
+        } else if !subName.isEmpty {
+            subAvatarFallback
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
+        }
+    }
+
+    private var subAvatarFallback: some View {
+        Text(String(subName.prefix(1)))
+            .font(.system(size: 28 * 0.42, weight: .semibold, design: .rounded))
+            .foregroundColor(.textSecondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.bgMuted)
     }
 
     // MARK: - Card List View
@@ -190,11 +162,15 @@ struct SubDetailView: View {
             LazyVStack(spacing: 10) {
                 ForEach(items) { app in
                     appCard(app)
-                        .neboxMatchedTransitionSource(id: app.id, in: appNavigationNamespace)
                         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .onTapGesture {
-                            selectedApp = app
-                            isNavigationActive = true
+                            router.push(.appDetail(appID: app.id))
+                        }
+                        // Per-row, so the zoom animates out of this card.
+                        .neboxNavigationDestination(
+                            isPresented: router.binding(for: .appDetail(appID: app.id))
+                        ) {
+                            AppDetailView(app: app)
                         }
                         .contextMenu {
                             let favIds = boxModel.boxData.usercfgs?.favapps ?? []
@@ -221,63 +197,33 @@ struct SubDetailView: View {
         }
     }
 
-    @available(iOS 18.0, *)
+    /// Read-only grid: no edit mode or reordering, tap opens the app detail.
     private var appGridView: some View {
-        ScrollView {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4),
-                spacing: 24
-            ) {
-                ForEach(items) { app in
-                    appGridItem(app)
-                        .neboxMatchedTransitionSource(id: app.id, in: appNavigationNamespace)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedApp = app
-                            isNavigationActive = true
-                        }
-                        .contextMenu {
-                            let isFav = favAppIds.contains(app.id)
-                            Button {
-                                toggleFavorite(app)
-                            } label: {
-                                Label(
-                                    isFav ? "取消收藏" : "加入收藏",
-                                    systemImage: isFav ? "heart.slash" : "heart.fill"
-                                )
-                            }
-                        }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-            .padding(.bottom, adaptiveBottomInset())
-        }
-        .scrollDismissesKeyboard(.interactively)
-    }
-
-    private func appGridItem(_ app: AppModel) -> some View {
-        VStack(spacing: 6) {
-            ZStack(alignment: .bottomTrailing) {
-                AppIconView(app: app, size: 60)
-                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
-
-                if favAppIds.contains(app.id) {
-                    Image(systemName: "star.circle.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.yellow, .white)
-                        .offset(x: 4, y: 4)
-                }
-            }
-
-            Text(app.name)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundColor(.textSecondary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
-        }
-        .frame(height: 90, alignment: .top)
+        AppGridView(
+            items: $items,
+            boxModel: boxModel,
+            router: router,
+            isEditMode: .constant(false),
+            allowsEdit: false,
+            favAppIds: favAppIds,
+            contextMenu: { app in
+                let isFav = favAppIds.contains(app.id)
+                return AnyView(
+                    Button {
+                        toggleFavorite(app)
+                    } label: {
+                        Label(
+                            isFav ? "取消收藏" : "加入收藏",
+                            systemImage: isFav ? "heart.slash" : "heart.fill"
+                        )
+                    }
+                )
+            },
+            destination: { app in
+                AnyView(AppDetailView(app: app))
+            },
+            onScrolled: $isScrolled
+        )
     }
 
     private func toggleFavorite(_ app: AppModel) {
@@ -366,24 +312,4 @@ struct SubDetailView: View {
         .shadow(color: .black.opacity(0.03), radius: 5, x: 0, y: 2)
     }
 
-    // MARK: - Helpers
-
-    private func favContextMenu(for app: AppModel) -> UIMenu {
-        let favIds = boxModel.boxData.usercfgs?.favapps ?? []
-        let isFav = favIds.contains(app.id)
-        let title = isFav ? "取消收藏" : "加入收藏"
-        let image = UIImage(systemName: isFav ? "heart.slash" : "heart.fill")
-        return UIMenu(children: [
-            UIAction(title: title, image: image) { _ in
-                Task { @MainActor in
-                    let ids = boxModel.boxData.usercfgs?.favapps ?? []
-                    if ids.contains(app.id) {
-                        boxModel.updateData(path: "usercfgs.favapps", data: ids.filter { $0 != app.id })
-                    } else {
-                        boxModel.updateData(path: "usercfgs.favapps", data: ids + [app.id])
-                    }
-                }
-            },
-        ])
-    }
 }

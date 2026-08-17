@@ -23,32 +23,39 @@ struct AppIconView: View {
         return appearance.isDark(systemIsDark: colorScheme == .dark)
     }
 
-    @State private var loadFailed = false
+    /// Which URL failed, rather than a plain flag: keyed state survives re-renders and
+    /// resets only when the icon URL genuinely changes.
+    @State private var failedURL: URL?
 
     var body: some View {
-        if let url = app.adaptiveIconURL(isDark: isDark), !loadFailed {
-            ZStack {
-                if isDark {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(Color.bgCard)
-                }
+        // `WebImage` keeps the decoded image in a `@StateObject`, which SwiftUI throws
+        // away whenever the view's *identity* changes — and it then renders the
+        // placeholder until the image reloads. So this tree must stay structurally
+        // identical across renders: no `if`/`else` swapping around the WebImage, and
+        // no `.id(...)`, both of which re-key it and cause the image ⇄ letter flicker
+        // during the edit-mode jiggle.
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(isDark ? Color.bgCard : Color.clear)
 
-                WebImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    placeholderView
-                }
-                .onFailure { _ in
-                    loadFailed = true
-                }
+            // Always present; a nil URL simply renders the placeholder inside it.
+            WebImage(url: iconURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                placeholderView
             }
-            .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        } else {
-            placeholderView
-                .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .onFailure { _ in
+                failedURL = iconURL
+            }
         }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    /// `nil` once this exact URL has failed, so the placeholder shows instead.
+    private var iconURL: URL? {
+        guard let url = app.adaptiveIconURL(isDark: isDark) else { return nil }
+        return url == failedURL ? nil : url
     }
 
     private var placeholderView: some View {

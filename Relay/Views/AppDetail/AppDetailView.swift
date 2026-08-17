@@ -128,61 +128,6 @@ private struct GroupedFormStyle: ViewModifier {
     }
 }
 
-// MARK: - UIMenu Button Wrapper
-
-private final class NoHighlightMenuUIButton: UIButton {
-    override var isHighlighted: Bool {
-        get { false }
-        set { }
-    }
-}
-
-private struct UIMenuButton: UIViewRepresentable {
-    let systemImage: String
-    var tintColor: UIColor = .secondaryLabel
-    var backgroundColor: UIColor = .clear
-    var cornerRadius: CGFloat = 0
-    let menu: UIMenu
-
-    func makeUIView(context: Context) -> UIButton {
-        let button = NoHighlightMenuUIButton(type: .system)
-        var configuration = UIButton.Configuration.plain()
-        configuration.contentInsets = .zero
-        configuration.baseBackgroundColor = backgroundColor
-        configuration.background.backgroundColor = backgroundColor
-        configuration.background.cornerRadius = cornerRadius
-        configuration.background.strokeColor = .clear
-        configuration.background.visualEffect = nil
-        button.configuration = configuration
-        button.showsMenuAsPrimaryAction = true
-        button.adjustsImageWhenHighlighted = false
-        button.backgroundColor = .clear
-        button.layer.cornerRadius = 0
-        button.layer.masksToBounds = false
-        button.contentHorizontalAlignment = .center
-        button.contentVerticalAlignment = .center
-        button.configurationUpdateHandler = { control in
-            guard var cfg = control.configuration else { return }
-            cfg.baseBackgroundColor = backgroundColor
-            cfg.background.backgroundColor = backgroundColor
-            cfg.background.cornerRadius = cornerRadius
-            cfg.background.strokeColor = .clear
-            cfg.background.visualEffect = nil
-            control.configuration = cfg
-        }
-        return button
-    }
-
-    func updateUIView(_ button: UIButton, context: Context) {
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
-        let image = UIImage(systemName: systemImage, withConfiguration: symbolConfig)
-        button.setImage(image, for: .normal)
-        button.setImage(image, for: .highlighted)
-        button.tintColor = tintColor
-        button.menu = menu
-    }
-}
-
 struct HTMLTextView: View {
     let html: String
     @State private var webViewHeight: CGFloat = 1
@@ -650,6 +595,9 @@ struct AppDetailView: View {
 
     @ViewBuilder
     private func withAppBottomActions<Content: View>(_ content: Content, app: AppModel) -> some View {
+        // `ToolbarSpacer` is an iOS 26 SDK symbol, so the native toolbar branch needs
+        // the compile-time guard on top of the runtime `#available` check.
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content.toolbar {
                 ToolbarItem(placement: .bottomBar) {
@@ -666,10 +614,18 @@ struct AppDetailView: View {
                 }
             }
         } else {
-            content.safeAreaInset(edge: .bottom) {
-                appLegacyBottomActionBar(app: app)
-                    .offset(y: keyboardHeight)
-            }
+            appLegacyBottomActions(content, app: app)
+        }
+        #else
+        appLegacyBottomActions(content, app: app)
+        #endif
+    }
+
+    @ViewBuilder
+    private func appLegacyBottomActions<Content: View>(_ content: Content, app: AppModel) -> some View {
+        content.safeAreaInset(edge: .bottom) {
+            appLegacyBottomActionBar(app: app)
+                .offset(y: keyboardHeight)
         }
     }
 
@@ -746,20 +702,26 @@ struct AppDetailView: View {
                         .foregroundColor(isCurrent ? .accentColor : .primary)
                 }
                 Spacer()
-                UIMenuButton(
-                    systemImage: "ellipsis",
-                    tintColor: UIColor(.secondary),
-                    menu: UIMenu(children: [
-                        UIAction(title: "复制会话", image: UIImage(systemName: "doc.on.doc")) { [self] _ in
-                            copySession(session)
-                        },
-                        UIAction(title: "删除", image: UIImage(systemName: "trash"), attributes: .destructive) { [self] _ in
-                            boxModel.delAppSession(sessionId: session.id)
-                            toastManager.showToast(message: "已删除")
-                        }
-                    ])
-                )
-                .frame(width: 24, height: 24)
+                Menu {
+                    Button {
+                        copySession(session)
+                    } label: {
+                        Label("复制会话", systemImage: "doc.on.doc")
+                    }
+                    Button(role: .destructive) {
+                        boxModel.delAppSession(sessionId: session.id)
+                        toastManager.showToast(message: "已删除")
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("会话操作")
             }
 
             if !session.datas.isEmpty {
@@ -1010,35 +972,42 @@ struct AppDetailView: View {
             Divider()
 
             HStack(spacing: 10) {
-                UIMenuButton(
-                    systemImage: "ellipsis",
-                    tintColor: UIColor(.textPrimary),
-                    menu: UIMenu(children: [
-                        UIAction(title: "导入会话", image: UIImage(systemName: "square.and.arrow.down")) { [self] _ in
-                            showImportSession = true
-                        },
-                        UIAction(title: "复制数据", image: UIImage(systemName: "doc.on.clipboard")) { [self] _ in
-                            copyAppDatas()
-                        },
-                        UIAction(title: "复制会话", image: UIImage(systemName: "doc.on.doc")) { [self] _ in
-                            if let session = cachedAppDataInfo.curSession {
-                                copySession(session)
-                            }
-                        },
-                        UIAction(title: "清除数据", image: UIImage(systemName: "trash"), attributes: .destructive) { [self] _ in
-                            Task {
-                                boxModel.clearAppDatas(app: app)
-                                toastManager.showToast(message: "已清除")
-                            }
+                Menu {
+                    Button {
+                        showImportSession = true
+                    } label: {
+                        Label("导入会话", systemImage: "square.and.arrow.down")
+                    }
+                    Button(action: copyAppDatas) {
+                        Label("复制数据", systemImage: "doc.on.clipboard")
+                    }
+                    Button {
+                        if let session = cachedAppDataInfo.curSession {
+                            copySession(session)
                         }
-                    ])
-                )
-                .frame(width: 48, height: 48)
-                .background(
-                    Color.bgMuted,
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    } label: {
+                        Label("复制会话", systemImage: "doc.on.doc")
+                    }
+                    Button(role: .destructive) {
+                        Task {
+                            boxModel.clearAppDatas(app: app)
+                            toastManager.showToast(message: "已清除")
+                        }
+                    } label: {
+                        Label("清除数据", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                        .frame(width: 48, height: 48)
+                        .background(
+                            Color.bgMuted,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .accessibilityLabel("更多操作")
 
                 Button {
                     Task { @MainActor in

@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import Transmission
 import UIKit
 
 struct BackgroundImageModifier: ViewModifier {
@@ -152,21 +153,24 @@ extension View {
         }
     }
 
-    @ViewBuilder
+    /// Pushes `destination` using Transmission's `DestinationLink` zoom transition.
+    ///
+    /// `.zoomIfAvailable` gives the real zoom on iOS 18+ and degrades to the default
+    /// push below that, so no `#available` split is needed here.
+    ///
+    /// Transmission zooms from **the view this modifier is attached to** — there is no
+    /// `Namespace` / `matchedTransitionSource` pairing like SwiftUI's own zoom. Attach
+    /// it to the individual cell or row, never to the page as a whole, otherwise the
+    /// animation originates from the full screen.
     func neboxNavigationDestination<Destination: View>(
         isPresented: Binding<Bool>,
         @ViewBuilder destination: @escaping () -> Destination
     ) -> some View {
-        if #available(iOS 16.0, *) {
-            self.navigationDestination(isPresented: isPresented, destination: destination)
-        } else {
-            self.background(
-                NavigationLink(destination: destination(), isActive: isPresented) {
-                    EmptyView()
-                }
-                .hidden()
-            )
-        }
+        self.destination(
+            transition: .zoomIfAvailable,
+            isPresented: isPresented,
+            destination: destination
+        )
     }
 
     @ViewBuilder
@@ -202,23 +206,6 @@ extension View {
         }
     }
 
-    @ViewBuilder
-    func neboxMatchedTransitionSource<ID: Hashable>(id: ID, in namespace: Namespace.ID) -> some View {
-        if #available(iOS 18.0, *) {
-            self.matchedTransitionSource(id: id, in: namespace)
-        } else {
-            self
-        }
-    }
-
-    @ViewBuilder
-    func neboxZoomNavigationTransition<ID: Hashable>(sourceID: ID?, in namespace: Namespace.ID) -> some View {
-        if #available(iOS 18.0, *), let sourceID {
-            self.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
-        } else {
-            self
-        }
-    }
 }
 
 struct NEBoxHideTabBarPreferenceKey: PreferenceKey {
@@ -242,23 +229,42 @@ struct ScrollDismissKeyboardModifier: ViewModifier {
 }
 
 // MARK: - iOS 26 Liquid Glass Modifiers
+//
+// The Liquid Glass APIs (`glassEffect`, `.glassProminent`, `tabBarMinimizeBehavior`,
+// …) only *exist* in the iOS 26 SDK, which ships with Xcode 26 / Swift 6.2.
+// `#available` is a **runtime** check — it still requires the symbol to exist at
+// compile time, so it cannot guard these on an older SDK. Building on Xcode 16
+// (iOS 18 SDK, Swift 6.1) therefore fails with "no member 'glassEffect'".
+//
+// `#if compiler(>=6.2)` is the **compile-time** guard: Swift 6.2 is the first
+// toolchain (Xcode 26) whose SDK declares these symbols. Every Liquid Glass call
+// site must sit inside `#if compiler(>=6.2)` *and* an `#available` check — the
+// former so older Xcode can compile the file at all, the latter so older iOS
+// still takes the fallback path at runtime.
 
 /// Glass effect for floating tab bars and pill-shaped containers
 struct GlassTabBarModifier: ViewModifier {
+    /// Telegram's tab group and search pill are both fully rounded, so callers pass
+    /// their own radius (half the height) rather than sharing one fixed value.
+    var cornerRadius: CGFloat = 28
+
     func body(content: Content) -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
         } else {
-            content
-                .background(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .shadow(color: .black.opacity(0.1), radius: 16, y: 4)
+            legacyBackground(content)
         }
+        #else
+        legacyBackground(content)
+        #endif
+    }
+
+    @ViewBuilder
+    private func legacyBackground(_ content: Content) -> some View {
+        content
+            .background(RelayGlassBackground(cornerRadius: cornerRadius))
     }
 }
 
@@ -267,16 +273,25 @@ struct GlassCardModifier: ViewModifier {
     var cornerRadius: CGFloat = 16
 
     func body(content: Content) -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
         } else {
-            content
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
+            legacyBackground(content)
         }
+        #else
+        legacyBackground(content)
+        #endif
+    }
+
+    @ViewBuilder
+    private func legacyBackground(_ content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+            )
     }
 }
 
@@ -285,24 +300,33 @@ struct GlassButtonModifier: ViewModifier {
     let isDisabled: Bool
 
     func body(content: Content) -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content
                 .buttonStyle(.glassProminent)
                 .opacity(isDisabled ? 0.5 : 1.0)
         } else {
-            content
-                .foregroundColor(.white)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(isDisabled ? Color.gray.opacity(0.4) : Color.accentColor)
-                )
+            legacyBackground(content)
         }
+        #else
+        legacyBackground(content)
+        #endif
+    }
+
+    @ViewBuilder
+    private func legacyBackground(_ content: Content) -> some View {
+        content
+            .foregroundColor(.white)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isDisabled ? Color.gray.opacity(0.4) : Color.accentColor)
+            )
     }
 }
 
 extension View {
-    func glassTabBar() -> some View {
-        modifier(GlassTabBarModifier())
+    func glassTabBar(cornerRadius: CGFloat = 28) -> some View {
+        modifier(GlassTabBarModifier(cornerRadius: cornerRadius))
     }
 
     func glassCard(cornerRadius: CGFloat = 16) -> some View {
@@ -360,6 +384,7 @@ extension View {
     /// Per-tab toolbar chrome for native `TabView` on iOS 26+ (attach to each tab’s root, not `TabView`).
     @ViewBuilder
     func neboxLiquidGlassTabBarChrome() -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             self
                 .toolbarBackground(
@@ -374,5 +399,8 @@ extension View {
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 }

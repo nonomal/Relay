@@ -744,7 +744,8 @@ private struct ProfileBackupSection: View {
                             ],
                             onTap: {
                                 selectedBackup = bak
-                                navigateToDetail = true
+                                // Must carry an animation for Transmission to animate the push.
+                                withAnimation { navigateToDetail = true }
                             },
                             openRowId: $openRowId
                         )

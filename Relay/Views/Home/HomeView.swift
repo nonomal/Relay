@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import SDWebImageSwiftUI
 import os.log
 
@@ -40,12 +39,13 @@ private func iconURL(for env: SysEnv, isDark: Bool) -> String {
 struct HomeView: View {
     @EnvironmentObject var boxModel: BoxJsViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
     var onSearch: () -> Void
 
     @State var items: [AppModel] = []
-    @State private var selectedApp: AppModel? = nil
-    @State private var isNavigationActive: Bool = false
+    @StateObject private var router = RelayRouter()
     @State private var isEditMode: Bool = false
+    @State private var isScrolled: Bool = false
 
     private var activeEnv: String? { boxModel.boxData.syscfgs?.env }
     private var availableEnvs: [SysEnv] { boxModel.boxData.syscfgs?.envs ?? [] }
@@ -69,12 +69,15 @@ struct HomeView: View {
                         ProgressView().scaleEffect(1.2)
                         Spacer()
                     } else if !boxModel.favApps.isEmpty {
-                        CollectionViewWrapper(
+                        AppGridView(
                             items: $items,
                             boxModel: boxModel,
-                            selectedApp: $selectedApp,
-                            isNavigationActive: $isNavigationActive,
-                            isEditMode: $isEditMode
+                            router: router,
+                            isEditMode: $isEditMode,
+                            destination: { app in
+                                AnyView(AppDetailView(app: app))
+                            },
+                            onScrolled: $isScrolled
                         )
                     } else {
                         emptyStateView
@@ -87,10 +90,9 @@ struct HomeView: View {
                 }
 
             }
+            // Destination is attached per-cell inside `AppGridView` so the zoom
+            // transition originates from the tapped icon.
             .neboxHiddenNavigationBar()
-            .neboxNavigationDestination(isPresented: $isNavigationActive) {
-                AppDetailView(app: selectedApp)
-            }
         }
         .neboxLiquidGlassTabBarChrome()
     }
@@ -98,7 +100,7 @@ struct HomeView: View {
     // MARK: - Nav Bar
 
     private var navBar: some View {
-        HStack(spacing: 0) {
+        RelayNavBar(isScrolled: isScrolled) {
             // Left: current tool indicator, tap to open the app
             Button {
                 openProxyApp()
@@ -109,9 +111,7 @@ struct HomeView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            Spacer()
-
+        } trailing: {
             // Right: edit / search
             HStack(spacing: 16) {
                 if !boxModel.favApps.isEmpty {
@@ -132,8 +132,6 @@ struct HomeView: View {
                 }
             }
         }
-        .frame(height: 56)
-        .padding(.horizontal, 20)
     }
 
     @ViewBuilder
@@ -169,7 +167,7 @@ struct HomeView: View {
         guard let envId = activeEnv,
               let scheme = appURLScheme(for: envId),
               let url = URL(string: scheme) else { return }
-        UIApplication.shared.open(url)
+        openURL(url)
     }
 
     // MARK: - Empty State
@@ -197,427 +195,6 @@ struct HomeView: View {
         }
     }
 
-}
-
-// MARK: - CollectionViewWrapper
-
-struct CollectionViewWrapper: UIViewRepresentable {
-    @Binding var items: [AppModel]
-    var boxModel: BoxJsViewModel
-    @Binding var selectedApp: AppModel?
-    @Binding var isNavigationActive: Bool
-    @Binding var isEditMode: Bool
-    var bottomInset: CGFloat = adaptiveBottomInset()
-    var allowsEdit: Bool = true
-    var tapOverride: ((AppModel) -> Void)? = nil
-    var favAppIds: Set<String> = []
-    var contextMenuProvider: ((AppModel) -> UIMenu?)? = nil
-
-    func makeUIView(context: Context) -> UICollectionView {
-        let layout = UICollectionViewFlowLayout()
-        layout.sectionInset = UIEdgeInsets(top: 24, left: 16, bottom: bottomInset, right: 16)
-        layout.minimumInteritemSpacing = 0
-        layout.minimumLineSpacing = 24
-
-        let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
-        collectionView.backgroundColor = .clear
-        collectionView.delegate = context.coordinator
-        collectionView.dataSource = context.coordinator
-        collectionView.register(MyCell.self, forCellWithReuseIdentifier: "Cell")
-
-        context.coordinator.collectionView = collectionView
-
-        // Allow navigation swipe back gesture to work alongside collection view scrolling
-        if let panGesture = collectionView.panGestureRecognizer as? UIPanGestureRecognizer {
-            context.coordinator.setupEdgeSwipeSupport(for: collectionView, panGesture: panGesture)
-        }
-
-        let refreshControl = UIRefreshControl()
-        refreshControl.addTarget(context.coordinator, action: #selector(context.coordinator.handleRefresh(_:)), for: .valueChanged)
-        collectionView.refreshControl = refreshControl
-
-        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(context.coordinator.handleLongPress(_:)))
-        collectionView.addGestureRecognizer(longPress)
-
-        return collectionView
-    }
-
-    func updateUIView(_ uiView: UICollectionView, context: Context) {
-        let coord = context.coordinator
-        let itemIDs = items.map(\.id)
-        let editModeChanged = isEditMode != coord.prevEditMode
-        let itemsChanged = itemIDs != coord.prevItemIDs
-        let favChanged = favAppIds != coord.prevFavAppIds
-        let shouldReload = itemsChanged || favChanged || editModeChanged
-
-        // Only update non-binding properties; @Binding already reflects parent state
-        coord.tapOverride = tapOverride
-        coord.favAppIds = favAppIds
-        coord.contextMenuProvider = contextMenuProvider
-        coord.prevEditMode = isEditMode
-        coord.prevItemIDs = itemIDs
-        coord.prevFavAppIds = favAppIds
-
-        if shouldReload {
-            if uiView.refreshControl?.isRefreshing == true {
-                // Defer reload until after refresh animation completes to avoid stutter
-                coord.needsReloadAfterRefresh = true
-            } else {
-                uiView.reloadData()
-            }
-        }
-        if editModeChanged {
-            coord.applyJiggle(to: uiView, enabled: isEditMode)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(items: $items, boxModel: boxModel, selectedApp: $selectedApp, isNavigationActive: $isNavigationActive, isEditMode: $isEditMode, allowsEdit: allowsEdit, tapOverride: tapOverride, favAppIds: favAppIds, contextMenuProvider: contextMenuProvider)
-    }
-
-    class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate {
-        @Binding var items: [AppModel]
-        var boxModel: BoxJsViewModel
-        @Binding var selectedApp: AppModel?
-        @Binding var isNavigationActive: Bool
-        @Binding var isEditMode: Bool
-        var allowsEdit: Bool
-        var tapOverride: ((AppModel) -> Void)?
-        var favAppIds: Set<String>
-        var contextMenuProvider: ((AppModel) -> UIMenu?)?
-        var prevEditMode: Bool = false
-        var prevItemIDs: [String]
-        var prevFavAppIds: Set<String>
-        var needsReloadAfterRefresh = false
-        weak var collectionView: UICollectionView?
-        private weak var navPopGesture: UIGestureRecognizer?
-
-        init(items: Binding<[AppModel]>, boxModel: BoxJsViewModel, selectedApp: Binding<AppModel?>, isNavigationActive: Binding<Bool>, isEditMode: Binding<Bool>, allowsEdit: Bool, tapOverride: ((AppModel) -> Void)?, favAppIds: Set<String>, contextMenuProvider: ((AppModel) -> UIMenu?)?) {
-            _items = items
-            self.boxModel = boxModel
-            _selectedApp = selectedApp
-            _isNavigationActive = isNavigationActive
-            _isEditMode = isEditMode
-            self.allowsEdit = allowsEdit
-            self.tapOverride = tapOverride
-            self.favAppIds = favAppIds
-            self.contextMenuProvider = contextMenuProvider
-            self.prevItemIDs = items.wrappedValue.map(\.id)
-            self.prevFavAppIds = favAppIds
-        }
-
-        /// Configure collection view's pan gesture to allow navigation back swipe from left edge
-        func setupEdgeSwipeSupport(for collectionView: UICollectionView, panGesture: UIPanGestureRecognizer) {
-            // Find the navigation controller's interactive pop gesture
-            var responder: UIResponder? = collectionView
-            while let next = responder?.next {
-                if let nav = next as? UINavigationController,
-                   let popGesture = nav.interactivePopGestureRecognizer {
-                    navPopGesture = popGesture
-                    // Make collection view's pan gesture require the pop gesture to fail
-                    // This means if pop gesture recognizes (from left edge), pan won't interfere
-                    panGesture.require(toFail: popGesture)
-                    // Enable the pop gesture
-                    popGesture.isEnabled = true
-                    popGesture.delegate = nil
-                    break
-                }
-                responder = next
-            }
-        }
-
-        func collectionView(_: UICollectionView, numberOfItemsInSection _: Int) -> Int { items.count }
-
-        func collectionView(_ collectionView: UICollectionView, layout _: UICollectionViewLayout, sizeForItemAt _: IndexPath) -> CGSize {
-            let columns: CGFloat = 4
-            let totalInset: CGFloat = 32
-            let width = floor((collectionView.bounds.width - totalInset) / columns)
-            return CGSize(width: width, height: 90)
-        }
-
-        func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath) as! MyCell
-            let app = items[indexPath.item]
-            cell.titleLabel.text = app.name
-            cell.app = app
-            cell.showDeleteBadge(allowsEdit && isEditMode)
-            cell.showFavBadge(!favAppIds.isEmpty && favAppIds.contains(app.id))
-            if allowsEdit && isEditMode { startJiggleAnimation(for: cell) }
-            else { cell.layer.removeAnimation(forKey: "jiggle"); cell.transform = .identity }
-            return cell
-        }
-
-        func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-            let app = items[indexPath.item]
-            if let tapOverride {
-                tapOverride(app)
-            } else if isEditMode {
-                let updateIds = items.map { $0.id }.filter { $0 != app.id }
-                Task { @MainActor in
-                    boxModel.updateData(path: "usercfgs.favapps", data: updateIds)
-                }
-            } else {
-                selectedApp = app
-                isNavigationActive = true
-            }
-        }
-
-        @objc func handleRefresh(_ refreshControl: UIRefreshControl) {
-            Task {
-                await boxModel.fetchDataAsync()
-                await MainActor.run {
-                    refreshControl.endRefreshing()
-                    if needsReloadAfterRefresh, let cv = collectionView {
-                        needsReloadAfterRefresh = false
-                        cv.reloadData()
-                    }
-                }
-            }
-        }
-
-        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
-            guard allowsEdit, let collectionView else { return }
-            switch gesture.state {
-            case .began:
-                if !isEditMode {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    isEditMode = true
-                    applyJiggle(to: collectionView, enabled: true)
-                    updateDeleteBadges(in: collectionView, show: true)
-                }
-                if let ip = collectionView.indexPathForItem(at: gesture.location(in: collectionView)) {
-                    collectionView.beginInteractiveMovementForItem(at: ip)
-                }
-            case .changed:
-                collectionView.updateInteractiveMovementTargetPosition(gesture.location(in: gesture.view!))
-            case .ended:
-                collectionView.endInteractiveMovement()
-            default:
-                collectionView.cancelInteractiveMovement()
-            }
-        }
-
-        func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-            guard let contextMenuProvider else { return nil }
-            let app = items[indexPath.item]
-            guard let menu = contextMenuProvider(app) else { return nil }
-            return UIContextMenuConfiguration(identifier: indexPath as NSCopying, previewProvider: nil) { _ in menu }
-        }
-
-        func collectionView(_ collectionView: UICollectionView, previewForHighlightingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-            iconPreview(collectionView: collectionView, configuration: configuration)
-        }
-
-        func collectionView(_ collectionView: UICollectionView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-            iconPreview(collectionView: collectionView, configuration: configuration)
-        }
-
-        private func iconPreview(collectionView: UICollectionView, configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-            guard let indexPath = configuration.identifier as? IndexPath,
-                  let cell = collectionView.cellForItem(at: indexPath) as? MyCell else { return nil }
-            let params = UIPreviewParameters()
-            params.backgroundColor = .clear
-            params.visiblePath = UIBezierPath(
-                roundedRect: cell.imageView.bounds,
-                cornerRadius: cell.imageView.layer.cornerRadius
-            )
-            return UITargetedPreview(view: cell.imageView, parameters: params)
-        }
-
-        func applyJiggle(to collectionView: UICollectionView, enabled: Bool) {
-            for cell in collectionView.visibleCells {
-                if enabled { startJiggleAnimation(for: cell) }
-                else { cell.layer.removeAnimation(forKey: "jiggle"); cell.transform = .identity }
-            }
-        }
-
-        func startJiggleAnimation(for cell: UICollectionViewCell) {
-            let angle: CGFloat = .pi / 90
-            let anim = CAKeyframeAnimation(keyPath: "transform.rotation.z")
-            anim.values = [-angle, angle, -angle]
-            anim.keyTimes = [0, 0.5, 1.0]
-            anim.duration = 0.25 + Double.random(in: 0...0.08)
-            anim.repeatCount = .infinity
-            anim.isRemovedOnCompletion = false
-            cell.layer.add(anim, forKey: "jiggle")
-        }
-
-        func updateDeleteBadges(in collectionView: UICollectionView, show: Bool) {
-            for cell in collectionView.visibleCells {
-                (cell as? MyCell)?.showDeleteBadge(show)
-            }
-        }
-
-        func collectionView(_: UICollectionView, canMoveItemAt _: IndexPath) -> Bool { true }
-
-        func collectionView(_: UICollectionView, moveItemAt src: IndexPath, to dst: IndexPath) {
-            let moved = items.remove(at: src.item)
-            items.insert(moved, at: dst.item)
-            let ids = items.map { $0.id }
-            Task { @MainActor in
-                boxModel.updateData(path: "usercfgs.favapps", data: ids)
-            }
-        }
-    }
-}
-
-// MARK: - MyCell
-
-class MyCell: UICollectionViewCell {
-    let imageView = UIImageView()
-    let titleLabel = UILabel()
-    private let deleteBadge = UIImageView()
-    private let favBadge = UIImageView()
-
-    /// The app whose icon this cell displays — kept for adaptive icon switching.
-    var app: AppModel? {
-        didSet { updateIcon() }
-    }
-
-    private lazy var fallbackLabel: UILabel = {
-        let label = UILabel()
-        label.textAlignment = .center
-        label.textColor = UIColor(.textSecondary)
-        if let descriptor = UIFont.systemFont(ofSize: 60 * 0.42, weight: .semibold)
-            .fontDescriptor.withDesign(.rounded) {
-            label.font = UIFont(descriptor: descriptor, size: 0)
-        } else {
-            label.font = .systemFont(ofSize: 60 * 0.42, weight: .semibold)
-        }
-        label.isHidden = true
-        label.translatesAutoresizingMaskIntoConstraints = false
-        imageView.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: imageView.centerYAnchor),
-        ])
-        return label
-    }()
-
-    private func updateIcon() {
-        guard let app else { imageView.image = nil; hideFallbackLabel(); return }
-        let appearance = IconAppearance(rawValue: UserDefaults.standard.string(forKey: IconAppearance.userDefaultsKey) ?? "") ?? .auto
-        let isDark = appearance.isDark(systemIsDark: traitCollection.userInterfaceStyle == .dark)
-        imageView.backgroundColor = isDark ? UIColor(.bgCard) : .clear
-        if let url = app.adaptiveIconURL(isDark: isDark) {
-            // Downsample to display size (60pt × @3x = 180px) to avoid decoding
-            // full-resolution bitmaps into memory.
-            let thumbSize = CGSize(width: 180, height: 180)
-            imageView.sd_setImage(with: url, placeholderImage: nil, options: [], context: [.imageThumbnailPixelSize: thumbSize], progress: nil) { [weak self] image, _, _, _ in
-                guard let self else { return }
-                if image == nil {
-                    self.showFallbackLabel(for: app.name)
-                } else {
-                    self.hideFallbackLabel()
-                }
-            }
-        } else {
-            showFallbackLabel(for: app.name)
-        }
-    }
-
-    private func showFallbackLabel(for name: String) {
-        imageView.image = nil
-        imageView.backgroundColor = UIColor(.bgMuted)
-        fallbackLabel.text = name.first.map(String.init)
-        fallbackLabel.isHidden = false
-    }
-
-    private func hideFallbackLabel() {
-        fallbackLabel.isHidden = true
-    }
-
-    private var iconAppearanceObserver: NSObjectProtocol?
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
-            updateIcon()
-        }
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-
-        imageView.contentMode = .scaleAspectFill
-        imageView.clipsToBounds = true
-        imageView.layer.cornerRadius = 60 * 0.2237 // iOS home-screen icon ratio
-        imageView.layer.cornerCurve = .continuous
-        imageView.tintColor = .systemGray3
-        contentView.addSubview(imageView)
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            imageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            imageView.widthAnchor.constraint(equalToConstant: 60),
-            imageView.heightAnchor.constraint(equalToConstant: 60),
-        ])
-
-        contentView.layer.shadowColor = UIColor.black.cgColor
-        contentView.layer.shadowOffset = CGSize(width: 0, height: 2)
-        contentView.layer.shadowOpacity = 0.12
-        contentView.layer.shadowRadius = 4
-
-        titleLabel.textAlignment = .center
-        titleLabel.numberOfLines = 1
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.textColor = UIColor(.textSecondary)
-        titleLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .medium)
-        contentView.addSubview(titleLabel)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: imageView.bottomAnchor, constant: 6),
-            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 2),
-            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -2),
-            titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor),
-        ])
-
-        let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
-            .applying(UIImage.SymbolConfiguration(paletteColors: [.white, .darkGray]))
-        deleteBadge.image = UIImage(systemName: "minus.circle.fill", withConfiguration: config)
-        deleteBadge.isHidden = true
-        contentView.addSubview(deleteBadge)
-        deleteBadge.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            deleteBadge.centerXAnchor.constraint(equalTo: imageView.leadingAnchor),
-            deleteBadge.centerYAnchor.constraint(equalTo: imageView.topAnchor),
-            deleteBadge.widthAnchor.constraint(equalToConstant: 22),
-            deleteBadge.heightAnchor.constraint(equalToConstant: 22),
-        ])
-
-        let favConfig = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
-            .applying(UIImage.SymbolConfiguration(paletteColors: [.systemYellow, .white]))
-        favBadge.image = UIImage(systemName: "star.circle.fill", withConfiguration: favConfig)
-        favBadge.isHidden = true
-        contentView.addSubview(favBadge)
-        favBadge.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            favBadge.trailingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 4),
-            favBadge.bottomAnchor.constraint(equalTo: imageView.bottomAnchor, constant: 4),
-            favBadge.widthAnchor.constraint(equalToConstant: 18),
-            favBadge.heightAnchor.constraint(equalToConstant: 18),
-        ])
-
-        iconAppearanceObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.updateIcon()
-        }
-    }
-
-    deinit {
-        if let observer = iconAppearanceObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
-    }
-
-    func showDeleteBadge(_ show: Bool) { deleteBadge.isHidden = !show }
-    func showFavBadge(_ show: Bool) { favBadge.isHidden = !show }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError() }
 }
 
 #Preview {

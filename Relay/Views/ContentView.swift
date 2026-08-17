@@ -229,6 +229,9 @@ struct ContentView: View {
 
     @ViewBuilder
     private var mainContent: some View {
+        // `Tab(role: .search)` and `tabBarMinimizeBehavior` are iOS 26 SDK symbols,
+        // so they need the compile-time guard as well as the runtime `#available`.
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             TabView(selection: $selectedTab) {
                 Tab("Home", systemImage: "house", value: 0) {
@@ -247,79 +250,55 @@ struct ContentView: View {
             .tint(NEBoxTabBarPalette.selected)
             .tabBarMinimizeBehavior(.onScrollDown)
         } else {
-            ZStack(alignment: .bottom) {
-                Group {
-                    switch selectedTab {
-                    case 0:  HomeView(onSearch: { showSearch = true })
-                    case 1:  SubcribeView()
-                    case 2:  ProfileView()
-                    default: HomeView(onSearch: { showSearch = true })
-                    }
-                }
+            legacyTabs
+        }
+        #else
+        legacyTabs
+        #endif
+    }
 
-                if !hideFloatingTabBar {
-                    floatingTabBar
-                        .zIndex(10)
+    /// Custom floating tab bar used on iOS < 26 (and whenever the app is built
+    /// with a pre-Xcode-26 toolchain that has no Liquid Glass `TabView`).
+    @ViewBuilder
+    private var legacyTabs: some View {
+        ZStack(alignment: .bottom) {
+            Group {
+                switch selectedTab {
+                case 0:  HomeView(onSearch: { showSearch = true })
+                case 1:  SubcribeView()
+                case 2:  ProfileView()
+                default: HomeView(onSearch: { showSearch = true })
                 }
+            }
+
+            if !hideFloatingTabBar {
+                floatingTabBar
+                    .zIndex(10)
             }
         }
     }
 
     // MARK: - Floating Tab Bar (iOS < 26)
 
+    /// Telegram-style behaviours live in `RelayTabBar`: re-tapping the current tab
+    /// scrolls it to top instead of re-selecting, long-press raises its own action,
+    /// and horizontal swipes step between tabs.
     private var floatingTabBar: some View {
-        HStack(spacing: 0) {
-            Button { selectedTab = 0 } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: selectedTab == 0 ? "house.fill" : "house")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(selectedTab == 0 ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
-                    Text("HOME")
-                        .font(.system(size: 9, weight: selectedTab == 0 ? .bold : .medium))
-                        .foregroundColor(selectedTab == 0 ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
-                        .kerning(0.5)
-                }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Button { selectedTab = 1 } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: selectedTab == 1 ? "square.stack.fill" : "square.stack")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(selectedTab == 1 ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
-                    Text("SUBS")
-                        .font(.system(size: 9, weight: selectedTab == 1 ? .bold : .medium))
-                        .foregroundColor(selectedTab == 1 ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
-                        .kerning(0.5)
-                }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Button { selectedTab = 2 } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: selectedTab == 2 ? "person.fill" : "person")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(selectedTab == 2 ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
-                    Text("PROFILE")
-                        .font(.system(size: 9, weight: selectedTab == 2 ? .bold : .medium))
-                        .foregroundColor(selectedTab == 2 ? NEBoxTabBarPalette.selected : NEBoxTabBarPalette.unselected)
-                        .kerning(0.5)
-                }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(height: 50)
-        .padding(4)
-        .glassTabBar()
-        .padding(.horizontal, 21)
-        .padding(.bottom, 4)
-        .animation(nil, value: selectedTab)
+        RelayTabBar(
+            items: [
+                RelayTabItem(id: 0, title: "HOME", icon: "house"),
+                RelayTabItem(id: 1, title: "SUBS", icon: "square.stack"),
+                RelayTabItem(id: 2, title: "PROFILE", icon: "person"),
+            ],
+            selection: $selectedTab,
+            onReselect: { _ in
+                // Broadcast so whichever screen is showing can scroll itself to top.
+                NotificationCenter.default.post(name: .relayTabReselected, object: nil)
+            },
+            onLongPress: { _ in },
+            // Separate search pill to the right of the tabs, as in Telegram.
+            onSearch: { showSearch = true }
+        )
     }
 
     private func checkVersion() {
