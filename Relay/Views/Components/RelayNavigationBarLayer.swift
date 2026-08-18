@@ -105,19 +105,22 @@ extension View {
     /// 避免容器层条件隐藏时 tab bar 高度的底部安全区留白收不回。
     @ViewBuilder
     fileprivate func applyImmersiveNavigationBarAppearance() -> some View {
+        // Relay 的部署目标是 iOS 15（screenhop 是 17），而 `toolbar(_:for:)` /
+        // `toolbarBackground(_:for:)` 都是 16+，所以每条分支都要落到 16 的运行时
+        // 判断上；15 退回系统默认栏背景。
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             self
                 .toolbar(.visible, for: .navigationBar)
                 .toolbar(.hidden, for: .tabBar)
-        } else {
+        } else if #available(iOS 16.0, *) {
             self
                 .toolbar(.visible, for: .navigationBar)
                 .toolbarBackground(.hidden, for: .navigationBar)
+        } else {
+            self
         }
         #else
-        // Relay 的部署目标是 iOS 15（screenhop 是 17），这两个 API 都是 16+，
-        // 所以这条分支要比原实现多一层运行时判断；15 上退回系统默认栏背景。
         if #available(iOS 16.0, *) {
             self
                 .toolbar(.visible, for: .navigationBar)
