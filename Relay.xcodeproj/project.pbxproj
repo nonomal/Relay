@@ -43,6 +43,7 @@
 		E210FCEF2CBF6DCA004A8CFB /* ApiManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E210FCEE2CBF6DC7004A8CFB /* ApiManager.swift */; };
 		E23F56042C7DBDCD0039F1CC /* AppDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23F56032C7DBDCD0039F1CC /* AppDetailView.swift */; };
 		AA0000020000000A000000B7 /* AppDetailComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000010000000A000000B7 /* AppDetailComponents.swift */; };
+		AA0000020000000E000000B7 /* AppDetailSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000010000000E000000B7 /* AppDetailSessionsView.swift */; };
 		E24439742F92949F000E352F /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = E24439732F92949F000E352F /* Alamofire */; };
 		E24439762F92949F000E352F /* AnyCodable in Frameworks */ = {isa = PBXBuildFile; productRef = E24439752F92949F000E352F /* AnyCodable */; };
 		E24439782F92949F000E352F /* Moya in Frameworks */ = {isa = PBXBuildFile; productRef = E24439772F92949F000E352F /* Moya */; };
@@ -135,6 +136,7 @@
 		E210FCEE2CBF6DC7004A8CFB /* ApiManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApiManager.swift; sourceTree = "<group>"; };
 		E23F56032C7DBDCD0039F1CC /* AppDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDetailView.swift; sourceTree = "<group>"; };
 		AA0000010000000A000000B7 /* AppDetailComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDetailComponents.swift; sourceTree = "<group>"; };
+		AA0000010000000E000000B7 /* AppDetailSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDetailSessionsView.swift; sourceTree = "<group>"; };
 		E244392B2F92933A000E352F /* Relay.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relay.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E24439C02F9294A0000E352F /* PlatformBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformBridge.swift; sourceTree = "<group>"; };
 		E24439C12F9294A0000E352F /* PlatformColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformColors.swift; sourceTree = "<group>"; };
@@ -368,6 +370,7 @@
 			children = (
 				E23F56032C7DBDCD0039F1CC /* AppDetailView.swift */,
 				AA0000010000000A000000B7 /* AppDetailComponents.swift */,
+				AA0000010000000E000000B7 /* AppDetailSessionsView.swift */,
 				AA00000100000002000000A2 /* DataViewerView.swift */,
 				AA00000100000005000000A2 /* ScriptEditorView.swift */,
 			);
@@ -589,6 +592,7 @@
 				E2C273582C354F4A004952AA /* ContentView.swift in Sources */,
 				E23F56042C7DBDCD0039F1CC /* AppDetailView.swift in Sources */,
 				AA0000020000000A000000B7 /* AppDetailComponents.swift in Sources */,
+				AA0000020000000E000000B7 /* AppDetailSessionsView.swift in Sources */,
 				E2E9E2642C464CC300836E4B /* ArrayExtension.swift in Sources */,
 				E24439D02F9294A0000E352F /* PlatformBridge.swift in Sources */,
 				E24439D12F9294A0000E352F /* PlatformColors.swift in Sources */,

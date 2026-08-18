@@ -643,7 +643,13 @@ struct AppDetailView: View {
             .map(\.id))
     }
 
-    private var hasUnsavedChanges: Bool { !modifiedSettingIds.isEmpty }
+    /// Short-circuits on the first difference instead of building the whole Set —
+    /// this is read several times per body pass (save button fill, its accessibility
+    /// label, the group's revert action), and only the yes/no answer is needed.
+    private var hasUnsavedChanges: Bool {
+        guard !originalValues.isEmpty else { return false }
+        return (app?.settings ?? []).contains { originalValues[$0.id] != Self.comparableValue($0.val) }
+    }
 
     var body: some View {
         if let app = app {
@@ -776,17 +782,16 @@ struct AppDetailView: View {
     // MARK: - Current Session Data Section
 
     private func appSessionDataSection(app: AppModel) -> some View {
-        let title = cachedAppDataInfo.curSession.map { "当前会话 · \($0.name)" } ?? "当前会话"
-
-        return DetailGroup(title: title, actionTitle: "克隆") {
-            boxModel.saveAppSession(app: app, datas: cachedAppDataInfo.datas)
-            toastManager.showToast(message: "已克隆会话")
-        } content: {
-            ForEach(Array(cachedAppDataInfo.datas.enumerated()), id: \.element.key) { index, data in
-                if index > 0 { DetailRowDivider() }
-                dataRow(data)
+        AppCurrentSessionSection(
+            app: app,
+            datas: cachedAppDataInfo.datas,
+            currentSessionName: cachedAppDataInfo.curSession?.name,
+            onRequestClear: { pendingClearKey = $0 },
+            onClone: {
+                boxModel.saveAppSession(app: app, datas: cachedAppDataInfo.datas)
+                toastManager.showToast(message: "已克隆会话")
             }
-        }
+        )
         .confirmationDialog(
             "清除「\(pendingClearKey ?? "")」的数据？",
             isPresented: Binding(
@@ -854,8 +859,11 @@ struct AppDetailView: View {
                     if showsSettingsFilter {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
+                                // Computed once per render, not once per chip: the
+                                // diff walks every setting and each chip would repeat it.
+                                let modified = modifiedSettingIds
                                 ForEach(SettingsFilter.allCases, id: \.self) { filter in
-                                    filterChip(filter, settings: settings)
+                                    filterChip(filter, settings: settings, modified: modified)
                                 }
                             }
                             .padding(.horizontal, 1)
@@ -887,19 +895,19 @@ struct AppDetailView: View {
         }
     }
 
-    private func filterChip(_ filter: SettingsFilter, settings: [Setting]) -> some View {
+    private func filterChip(_ filter: SettingsFilter, settings: [Setting], modified: Set<String>) -> some View {
         let isOn = settingsFilter == filter
         let count: Int? = {
             switch filter {
             case .all: return nil
-            case .modified: return modifiedSettingIds.count
+            case .modified: return modified.count
             case .empty: return settings.filter { Self.isEmptyValue($0.val) }.count
             }
         }()
 
         return Button {
             settingsFilter = filter
-            filterSnapshot = Self.membership(for: filter, in: settings, modified: modifiedSettingIds)
+            filterSnapshot = Self.membership(for: filter, in: settings, modified: modified)
         } label: {
             HStack(spacing: 4) {
                 Text(filter.rawValue)
@@ -971,13 +979,17 @@ struct AppDetailView: View {
     }
 
     /// Stable string form used for diffing — AnyCodable is not Equatable.
+    /// `JSONEncoder` is comparatively expensive to build; `comparableValue` runs once
+    /// per setting per diff, so it must not allocate one each time.
+    private static let comparisonEncoder = JSONEncoder()
+
     private static func comparableValue(_ val: AnyCodable?) -> String {
         guard let value = val?.value else { return "" }
         if value is NSNull { return "" }
         if let s = value as? String { return s }
         if let b = value as? Bool { return b ? "true" : "false" }
         if let arr = value as? [String] { return arr.joined(separator: ",") }
-        if let encoded = try? JSONEncoder().encode(AnyCodable(value)),
+        if let encoded = try? Self.comparisonEncoder.encode(AnyCodable(value)),
            let str = String(data: encoded, encoding: .utf8) {
             return str
         }
@@ -1002,223 +1014,15 @@ struct AppDetailView: View {
 
     // MARK: - Current Session Data Row
 
-    /// Two lines: the key reads as a label, the value gets the full row width beneath it.
-    /// Long values (tokens, JSON) are unreadable when squeezed into a trailing column.
-    private func dataRow(_ data: SessionData) -> some View {
-        let valStr = dataValString(data.val)
-        let isEmpty = valStr.isEmpty
-        // Only surface the type when it is *not* plain text — "TEXT" on every row is noise.
-        let typeLabel = SettingValue.typeLabel(data.val).flatMap { $0 == "TEXT" ? nil : $0 }
-
-        return HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(data.key)
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundColor(.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if let typeLabel {
-                        Text(typeLabel)
-                            .font(.system(size: 9, weight: .semibold))
-                            .tracking(0.4)
-                            .foregroundColor(.textTertiary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(Color.bgMuted, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                Text(isEmpty ? "无数据" : valStr)
-                    .font(isEmpty
-                          ? .system(size: 13).italic()
-                          : .system(size: 13, design: .monospaced))
-                    .foregroundColor(isEmpty ? .textTertiary : .textPrimary)
-                    // Head truncation keeps the tail visible — the end of a token or
-                    // path is what distinguishes one value from another.
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            // One menu instead of two always-on icon buttons; clearing is destructive
-            // and no longer sits a few points away from copy.
-            Menu {
-                Button {
-                    copyToClipboard(text: valStr)
-                    toastManager.showToast(message: "已复制")
-                } label: {
-                    Label("复制值", systemImage: "doc.on.doc")
-                }
-                .disabled(isEmpty)
-
-                Button {
-                    copyToClipboard(text: data.key)
-                    toastManager.showToast(message: "已复制键名")
-                } label: {
-                    Label("复制键名", systemImage: "textformat.abc")
-                }
-
-                Divider()
-
-                Button(role: .destructive) {
-                    pendingClearKey = data.key
-                } label: {
-                    Label("清除", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.textTertiary)
-                    .frame(width: 28, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("\(data.key) 操作")
-        }
-        .padding(.leading, DetailMetrics.rowHPadding)
-        .padding(.trailing, 6)
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard !isEmpty else { return }
-            copyToClipboard(text: valStr)
-            toastManager.showToast(message: "已复制")
-        }
-    }
-
     // MARK: - Sessions
 
     private func sessionsGroup(app: AppModel) -> some View {
-        // Current session floats to the top — it is the one users check most.
-        let sessions = cachedAppDataInfo.sessions.sorted { lhs, _ in
-            cachedAppDataInfo.curSession?.id == lhs.id
-        }
-
-        return DetailGroup(
-            title: "历史会话 · \(sessions.count)",
-            actionTitle: "导入",
-            action: { showImportSession = true }
-        ) {
-            ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
-                if index > 0 { DetailRowDivider() }
-                sessionRow(session: session, app: app)
-            }
-        }
-    }
-
-    private func sessionRow(session: Session, app: AppModel) -> some View {
-        let isCurrent = cachedAppDataInfo.curSession?.id == session.id
-        // Preview caps at 3 rows so one fat session cannot fill the screen.
-        let preview = Array(session.datas.prefix(3))
-        let overflow = session.datas.count - preview.count
-
-        return VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                Text(session.name)
-                    .font(.system(size: 14, weight: isCurrent ? .semibold : .medium))
-                    .foregroundColor(isCurrent ? .accent : .textPrimary)
-                    .lineLimit(1)
-
-                if isCurrent {
-                    Text("使用中")
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .tracking(0.4)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
-                        .background(Color.accent, in: Capsule())
-                }
-
-                Spacer(minLength: 0)
-
-                Menu {
-                    Button {
-                        boxModel.linkAppSession(sessionId: session.id, appId: app.id)
-                        toastManager.showToast(message: "已关联")
-                    } label: {
-                        Label("关联到此会话", systemImage: "link")
-                    }
-                    Button {
-                        copySession(session)
-                    } label: {
-                        Label("复制会话", systemImage: "doc.on.doc")
-                    }
-                    Divider()
-                    Button(role: .destructive) {
-                        boxModel.delAppSession(sessionId: session.id)
-                        toastManager.showToast(message: "已删除")
-                    } label: {
-                        Label("删除", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.textTertiary)
-                        .frame(width: 30, height: 26)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("会话操作")
-            }
-
-            if !preview.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(preview, id: \.key) { data in
-                        let valStr = dataValString(data.val)
-                        HStack(spacing: 8) {
-                            Text(data.key)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.textSecondary)
-                                .lineLimit(1)
-                                .layoutPriority(1)
-                            Text(valStr.isEmpty ? "无数据" : valStr)
-                                .font(.system(size: 11))
-                                .foregroundColor(.textSecondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
-                    }
-                    if overflow > 0 {
-                        Text("还有 \(overflow) 项")
-                            .font(.system(size: 11))
-                            .foregroundColor(.textTertiary)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.bgMuted, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            }
-
-            HStack(spacing: 8) {
-                Text(RelativeTime.string(from: session.createTime))
-                    .font(.system(size: 11))
-                    .foregroundColor(.textTertiary)
-                    // Full timestamp stays reachable without spending a row on it.
-                    .accessibilityLabel(RelativeTime.absolute(from: session.createTime))
-                Spacer(minLength: 0)
-
-                // Only one primary action per row now; "关联" moved into the menu.
-                if !isCurrent {
-                    Button {
-                        boxModel.useAppSession(sessionId: session.id, appId: app.id)
-                        toastManager.showToast(message: "已切换")
-                    } label: {
-                        Text("切换")
-                            .font(.system(size: 12.5, weight: .medium))
-                            .foregroundColor(.accent)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 5)
-                            .background(Color.accent.opacity(0.12), in: Capsule())
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(.horizontal, DetailMetrics.rowHPadding)
-        .padding(.vertical, DetailMetrics.rowVPadding)
+        AppSessionsSection(
+            app: app,
+            sessions: cachedAppDataInfo.sessions,
+            currentSessionId: cachedAppDataInfo.curSession?.id,
+            onImport: { showImportSession = true }
+        )
     }
 
     // MARK: - Import Session Sheet
@@ -1535,17 +1339,6 @@ struct AppDetailView: View {
         )
     }
 
-    private static let jsonEncoder = JSONEncoder()
-
-    private func dataValString(_ val: AnyCodable?) -> String {
-        guard let val = val else { return "" }
-        if let str = val.value as? String { return str }
-        if let data = try? Self.jsonEncoder.encode(val), let str = String(data: data, encoding: .utf8) {
-            return str
-        }
-        return String(describing: val.value)
-    }
-
     private func isFavorite(_ app: AppModel) -> Bool {
         let favIds = boxModel.boxData.usercfgs?.favapps ?? []
         return favIds.contains(app.id)
@@ -1574,7 +1367,7 @@ struct AppDetailView: View {
     private func copyAppDatas() {
         var result: [String: String] = [:]
         for data in cachedAppDataInfo.datas {
-            result[data.key] = dataValString(data.val)
+            result[data.key] = SessionValueFormatter.string(data.val)
         }
         if let jsonData = try? JSONSerialization.data(withJSONObject: result),
            let str = String(data: jsonData, encoding: .utf8) {
