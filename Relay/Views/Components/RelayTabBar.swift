@@ -75,7 +75,10 @@ struct RelayTabBar: View {
     /// own iOS 26 bar (`TabBarComponent.swift:664`). No iOS 26 runtime is installed
     /// here to measure the system bar directly, so this follows Telegram's shipped
     /// value as the closest available reference.
-    private let barHeight: CGFloat = 64
+    static let barHeight: CGFloat = 64
+    /// Total height the bar occupies, including its bottom padding. `RelayTabHost`
+    /// uses this to size the bar's slot and inset tab content.
+    static let floatingHeight: CGFloat = 68
     /// Telegram's gap between the tab group and the search pill.
     private let searchGap: CGFloat = 8
 
@@ -114,8 +117,8 @@ struct RelayTabBar: View {
                 )
             }
         }
-        .frame(height: barHeight)
-        .glassTabBar(cornerRadius: barHeight / 2)
+        .frame(height: RelayTabBar.barHeight)
+        .glassTabBar(cornerRadius: RelayTabBar.barHeight / 2)
     }
 
     private func select(_ id: Int) {
@@ -139,11 +142,11 @@ struct RelayTabBar: View {
                 .font(.system(size: 20, weight: .medium))
                 // 与 tab 项同色（见 RelayTabButton）——非选中灰在壁纸上读不出来。
                 .foregroundColor(NEBoxTabBarPalette.selected)
-                .frame(width: barHeight, height: barHeight)
+                .frame(width: RelayTabBar.barHeight, height: RelayTabBar.barHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(RelayTabPressStyle())
-        .glassTabBar(cornerRadius: barHeight / 2)
+        .glassTabBar(cornerRadius: RelayTabBar.barHeight / 2)
         .accessibilityLabel("搜索")
     }
 

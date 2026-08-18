@@ -39,7 +39,7 @@ struct ProfileView: View {
     private static let navBarFadeTravel: CGFloat = 56
 
     var body: some View {
-        neboxNavigationContainer {
+        neboxTabRootNavigationContainer {
             ZStack(alignment: .top) {
                 RelayPageBackground()
 

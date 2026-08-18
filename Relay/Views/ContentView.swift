@@ -157,7 +157,6 @@ struct ContentView: View {
     @State private var showVersionSheet = false
     @State private var currentVersion: String = ""
     @State private var selectedTab: Int = 0
-    @State private var hideFloatingTabBar: Bool = false
 
     var body: some View {
         VStack {
@@ -222,9 +221,6 @@ struct ContentView: View {
                 break
             }
         }
-        .onPreferenceChange(NEBoxHideTabBarPreferenceKey.self) { shouldHide in
-            hideFloatingTabBar = shouldHide
-        }
     }
 
     // MARK: - Main Content (iOS version adaptive)
@@ -265,21 +261,24 @@ struct ContentView: View {
     /// with a pre-Xcode-26 toolchain that has no Liquid Glass `TabView`).
     @ViewBuilder
     private var legacyTabs: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch selectedTab {
-                case 0:  HomeView(onSearch: { showSearch = true })
-                case 1:  SubcribeView()
-                case 2:  ProfileView()
-                default: HomeView(onSearch: { showSearch = true })
+        // Hosted in a real `UITabBarController` so a pushed detail page covers the bar
+        // the way it does in any native app — see `RelayTabHost` for why the previous
+        // `ZStack` + `zIndex` arrangement could not, and why hiding the bar by hand
+        // made it come back late.
+        RelayTabHost(
+            tabCount: 3,
+            selection: $selectedTab,
+            barHeight: RelayTabBar.floatingHeight,
+            content: { index in
+                switch index {
+                case 1:  AnyView(SubcribeView())
+                case 2:  AnyView(ProfileView())
+                default: AnyView(HomeView(onSearch: { showSearch = true }))
                 }
-            }
-
-            if !hideFloatingTabBar {
-                floatingTabBar
-                    .zIndex(10)
-            }
-        }
+            },
+            bar: { floatingTabBar }
+        )
+        .ignoresSafeArea()
     }
 
     // MARK: - Floating Tab Bar (iOS < 26)

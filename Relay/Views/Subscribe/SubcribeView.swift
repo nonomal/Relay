@@ -20,7 +20,7 @@ struct SubcribeView: View {
     @StateObject private var router = RelayRouter()
 
     var body: some View {
-        neboxNavigationContainer {
+        neboxTabRootNavigationContainer {
             ZStack(alignment: .top) {
                 RelayPageBackground()
 

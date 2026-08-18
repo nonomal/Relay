@@ -50,7 +50,7 @@ struct HomeView: View {
     private var availableEnvs: [SysEnv] { boxModel.boxData.syscfgs?.envs ?? [] }
 
     var body: some View {
-        neboxNavigationContainer {
+        neboxTabRootNavigationContainer {
             ZStack(alignment: .top) {
                 RelayPageBackground()
 

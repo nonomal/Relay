@@ -118,16 +118,6 @@ struct HideScrollContentBackground: ViewModifier {
     }
 }
 
-private struct GroupedFormStyle: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 16.0, *) {
-            content.formStyle(.grouped)
-        } else {
-            content
-        }
-    }
-}
-
 struct HTMLTextView: View {
     let html: String
     @State private var webViewHeight: CGFloat = 1
@@ -141,6 +131,14 @@ struct HTMLTextView: View {
 
 struct AppHeaderView: View {
     let app: AppModel
+    /// Favourite lives in the header card now, so the nav bar is free for "more".
+    var isFavorite: Bool = false
+    var onToggleFavorite: (() -> Void)? = nil
+    /// Status strip content, derived from data already in `cachedAppDataInfo`.
+    var dataCount: Int = 0
+    var sessionName: String? = nil
+    var lastRunText: String? = nil
+
     @Environment(\.openURL) private var openURL
 
     private var repoURL: URL? {
@@ -148,42 +146,82 @@ struct AppHeaderView: View {
         return URL(string: repo)
     }
 
+    private var showsStrip: Bool {
+        dataCount > 0 || sessionName != nil || lastRunText != nil
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            AppIconView(app: app, size: 56)
-                .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 1)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(app.name)
-                    .font(.system(size: 17, weight: .semibold))
-                Text(app.author)
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                if let repo = app.repo, !repo.isEmpty {
-                    HStack(spacing: 3) {
-                        if repoURL != nil {
-                            Image(systemName: "link")
-                                .font(.system(size: 9))
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                AppIconView(app: app, size: 54)
+                    .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 1)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(app.name)
+                        .font(.system(size: 16.5, weight: .semibold))
+                        .foregroundColor(.textPrimary)
+                    Text(app.author)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.textSecondary)
+                    if let repo = app.repo, !repo.isEmpty {
+                        HStack(spacing: 3) {
+                            if repoURL != nil {
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                            }
+                            Text(repo)
+                                .lineLimit(1)
                         }
-                        Text(repo)
-                            .lineLimit(1)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(repoURL != nil ? .accent : .textSecondary)
                     }
-                    .font(.system(size: 11))
-                    .foregroundColor(repoURL != nil ? .accent : .secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if let url = repoURL { openURL(url) }
+                }
+
+                if let onToggleFavorite {
+                    Button(action: onToggleFavorite) {
+                        Image(systemName: isFavorite ? "heart.fill" : "heart")
+                            .font(.system(size: 19))
+                            .foregroundColor(isFavorite ? .accentRed : .textTertiary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isFavorite ? "取消收藏" : "收藏")
                 }
             }
-            Spacer()
-            if repoURL != nil {
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.textTertiary)
+            .padding(DetailMetrics.rowHPadding)
+
+            if showsStrip {
+                DetailRowDivider()
+                statusStrip
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if let url = repoURL {
-                openURL(url)
+    }
+
+    private var statusStrip: some View {
+        HStack(spacing: 7) {
+            DetailStatusDot(state: dataCount > 0 ? .ok : .idle)
+            Text(dataCount > 0 ? "\(dataCount) 项数据" : "无数据")
+
+            if let sessionName {
+                Text("·").foregroundColor(.textTertiary)
+                Text("会话 \(sessionName)").lineLimit(1)
             }
+            if let lastRunText {
+                Text("·").foregroundColor(.textTertiary)
+                Text(lastRunText).lineLimit(1)
+            }
+            Spacer(minLength: 0)
         }
+        .font(.system(size: 11.5))
+        .foregroundColor(.textSecondary)
+        .padding(.horizontal, DetailMetrics.rowHPadding)
+        .padding(.vertical, 9)
     }
 }
 
@@ -224,55 +262,95 @@ struct AppDescCardView: View {
 struct AppScriptsView: View {
     let scripts: [RunScript]
     var onScriptResult: ((ScriptResp) -> Void)? = nil
-    @State private var isLoading = false
     @State private var loadingScript: String? = nil
+    /// Per-script outcome of the last run in this session. `RunScript` carries no
+    /// history, so this is the only place the result can live.
+    @State private var lastRun: [String: ScriptRunState] = [:]
     @EnvironmentObject var boxModel: BoxJsViewModel
 
+    struct ScriptRunState {
+        let succeeded: Bool
+        let at: Date
+    }
+
     var body: some View {
-        if !scripts.isEmpty {
-            ForEach(Array(scripts.enumerated()), id: \.element.script) { index, script in
-                HStack {
-                    Label {
-                        Text(script.name)
-                            .font(.system(size: 15))
-                    } icon: {
-                        Text("\(index + 1)")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundColor(.onAccent)
-                            .frame(width: 22, height: 22)
-                            .background(Color.accent.opacity(0.8), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    Spacer()
-                    if isLoading && loadingScript == script.script {
-                        ProgressView()
-                            .frame(width: 20, height: 20)
-                    } else {
-                        Button {
-                            Task {
-                                isLoading = true
-                                loadingScript = script.script
-                                do {
-                                    let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: script.script))
-                                    onScriptResult?(resp)
-                                    boxModel.fetchData()
-                                } catch {
-                                    onScriptResult?(ScriptResp(exception: "请求失败: \(error.localizedDescription)", output: nil))
-                                }
-                                isLoading = false
-                                loadingScript = nil
-                            }
-                        } label: {
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 22))
-                                .foregroundColor(.accentColor)
-                                .frame(width: 36, height: 36)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
+        ForEach(Array(scripts.enumerated()), id: \.element.script) { index, script in
+            if index > 0 { DetailRowDivider() }
+            scriptRow(script)
+        }
+    }
+
+    private func scriptRow(_ script: RunScript) -> some View {
+        HStack(spacing: 11) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(script.name)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.textPrimary)
+                HStack(spacing: 5) {
+                    DetailStatusDot(state: dotState(for: script))
+                    Text(subtitle(for: script))
                 }
+                .font(.system(size: 11))
+                .foregroundColor(.textTertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if loadingScript == script.script {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .frame(width: 30, height: 30)
+            } else {
+                Button {
+                    Task { await run(script) }
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(hasRun(script) ? .white : .accent)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            hasRun(script) ? Color.accent : Color.bgMuted,
+                            in: Circle()
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("运行 \(script.name)")
             }
         }
+        .padding(.horizontal, DetailMetrics.rowHPadding)
+        .padding(.vertical, 11)
+    }
+
+    private func hasRun(_ script: RunScript) -> Bool {
+        lastRun[script.script] != nil
+    }
+
+    private func dotState(for script: RunScript) -> DetailStatusDot.State {
+        guard let state = lastRun[script.script] else { return .idle }
+        return state.succeeded ? .ok : .danger
+    }
+
+    private func subtitle(for script: RunScript) -> String {
+        guard let state = lastRun[script.script] else { return "尚未运行" }
+        let when = RelativeTime.string(from: ISO8601DateFormatter().string(from: state.at))
+        return "\(when) · \(state.succeeded ? "成功" : "失败")"
+    }
+
+    private func run(_ script: RunScript) async {
+        loadingScript = script.script
+        do {
+            let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: script.script))
+            lastRun[script.script] = ScriptRunState(
+                succeeded: resp.exception?.isEmpty ?? true,
+                at: Date()
+            )
+            onScriptResult?(resp)
+            boxModel.fetchData()
+        } catch {
+            lastRun[script.script] = ScriptRunState(succeeded: false, at: Date())
+            onScriptResult?(ScriptResp(exception: "请求失败: \(error.localizedDescription)", output: nil))
+        }
+        loadingScript = nil
     }
 }
 
@@ -342,139 +420,181 @@ struct FormSettingRow: View {
         )
     }
 
+    private var title: String { setting.name ?? setting.id }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            settingControl
-            if let desc = setting.desc, !desc.isEmpty {
-                Text(desc)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+        switch setting.type {
+        // Option lists own their whole row — the label sits above the card-style options.
+        case "radios", "checkboxes":
+            optionGroup(isMultiSelect: setting.type == "checkboxes")
+
+        default:
+            DetailSettingRow(title: title, desc: setting.desc) {
+                settingControl
             }
         }
     }
+
+    // MARK: Option groups
+
+    @ViewBuilder
+    private func optionGroup(isMultiSelect: Bool) -> some View {
+        let items = setting.items ?? []
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .foregroundColor(.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let desc = setting.desc, !desc.isEmpty {
+                    Text(desc)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, DetailMetrics.rowHPadding)
+            .padding(.top, DetailMetrics.rowVPadding)
+            .padding(.bottom, 8)
+
+            if items.isEmpty {
+                Text("无可选项")
+                    .font(.system(size: 12.5))
+                    .foregroundColor(.textTertiary)
+                    .padding(.horizontal, DetailMetrics.rowHPadding)
+                    .padding(.bottom, DetailMetrics.rowVPadding)
+            } else if isMultiSelect {
+                let selected = arrayBinding(for: index)
+                ForEach(Array(items.enumerated()), id: \.element.key) { i, item in
+                    if i > 0 { DetailRowDivider() }
+                    DetailOptionRow(
+                        label: item.label,
+                        isSelected: selected.wrappedValue.contains(item.key),
+                        isMultiSelect: true
+                    ) {
+                        var keys = selected.wrappedValue
+                        if let idx = keys.firstIndex(of: item.key) {
+                            keys.remove(at: idx)
+                        } else {
+                            keys.append(item.key)
+                        }
+                        selected.wrappedValue = keys
+                    }
+                }
+            } else {
+                let selected = pickerBinding(for: index, items: items)
+                ForEach(Array(items.enumerated()), id: \.element.key) { i, item in
+                    if i > 0 { DetailRowDivider() }
+                    DetailOptionRow(
+                        label: item.label,
+                        isSelected: selected.wrappedValue == item.key,
+                        isMultiSelect: false
+                    ) {
+                        selected.wrappedValue = item.key
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Single-row controls
 
     @ViewBuilder
     private var settingControl: some View {
         switch setting.type {
         case "boolean":
-            Toggle(setting.name ?? "", isOn: boolBinding(for: index))
-                .font(.body)
+            DetailInlineLabel(title: title) {
+                Toggle("", isOn: boolBinding(for: index))
+                    .labelsHidden()
+                    .tint(.green)
+            }
 
         case "textarea":
             VStack(alignment: .leading, spacing: 6) {
-                Text(setting.name ?? "")
-                    .font(.body)
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: binding(for: index))
-                        .font(.body)
-                        .frame(minHeight: 100, maxHeight: 200)
-                        .neboxDismissKeyboardOnScroll()
-                        .modifier(HideScrollContentBackground())
-                        .padding(8)
-                        .background(Color(.tertiarySystemFill))
-                        .cornerRadius(10)
-                    if (settings[index].val?.value as? String)?.isEmpty != false {
-                        Text(setting.placeholder ?? "请输入内容...")
-                            .foregroundColor(Color(.placeholderText))
-                            .padding(.top, 16)
-                            .padding(.leading, 13)
-                            .allowsHitTesting(false)
-                    }
-                }
-            }
-
-        case "radios":
-            VStack(alignment: .leading, spacing: 8) {
-                Text(setting.name ?? "")
-                    .font(.body)
-                RadioButtonGroup(items: setting.items ?? [], selectedKey: binding(for: index))
-            }
-
-        case "checkboxes":
-            VStack(alignment: .leading, spacing: 8) {
-                Text(setting.name ?? "")
-                    .font(.body)
-                CheckBoxGroup(items: setting.items ?? [], selectedKeys: arrayBinding(for: index))
+                Text(title)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .foregroundColor(.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                DetailTextEditor(
+                    placeholder: setting.placeholder ?? "请输入内容",
+                    text: binding(for: index)
+                )
             }
 
         case "selects", "modalSelects":
-            let pickerItems = setting.items ?? []
-            HStack {
-                Text(setting.name ?? "")
-                    .font(.body)
-                Spacer()
-                if pickerItems.isEmpty {
-                    Text("-")
-                        .foregroundColor(.secondary)
+            let items = setting.items ?? []
+            DetailInlineLabel(title: title) {
+                if items.isEmpty {
+                    Text("—").foregroundColor(.textTertiary)
                 } else {
-                    Picker("", selection: pickerBinding(for: index, items: pickerItems)) {
-                        ForEach(pickerItems) { item in
-                            Text(item.label).tag(item.key)
+                    let selection = pickerBinding(for: index, items: items)
+                    Menu {
+                        Picker("", selection: selection) {
+                            ForEach(items) { item in
+                                Text(item.label).tag(item.key)
+                            }
                         }
+                    } label: {
+                        DetailPillLabel(
+                            text: items.first { $0.key == selection.wrappedValue }?.label
+                                ?? selection.wrappedValue
+                        )
                     }
-                    .pickerStyle(.menu)
                 }
             }
 
         case "slider":
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(setting.name ?? "")
-                        .font(.body)
-                    Spacer()
+                DetailInlineLabel(title: title) {
                     Text(String(format: "%.0f", doubleBinding(for: index).wrappedValue))
-                        .font(.system(.body, design: .rounded))
-                        .foregroundColor(.accentColor)
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
+                        .foregroundColor(.accent)
                 }
                 Slider(value: doubleBinding(for: index), in: 0...100, step: 1)
-                    .tint(.accentColor)
+                    .tint(.accent)
             }
 
         case "colorpicker":
-            HStack {
-                Text(setting.name ?? "")
-                    .font(.body)
-                Spacer()
-                ColorPicker("", selection: colorBinding(for: index))
-                    .labelsHidden()
+            let color = colorBinding(for: index)
+            DetailInlineLabel(title: title) {
+                HStack(spacing: 7) {
+                    ColorPicker("", selection: color)
+                        .labelsHidden()
+                        .frame(width: 28)
+                    // The hex is the value users actually copy between scripts.
+                    Text(color.wrappedValue.toHex())
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundColor(.textSecondary)
+                }
             }
 
         case "number":
-            VStack(alignment: .leading, spacing: 6) {
-                Text(setting.name ?? "")
-                    .font(.body)
-                TextField(setting.placeholder ?? "请输入数字", text: binding(for: index))
-                    .keyboardType(.decimalPad)
-                    .font(.body)
-                    .padding(10)
-                    .background(Color(.tertiarySystemFill))
-                    .cornerRadius(10)
+            DetailInlineLabel(title: title) {
+                DetailStepper(value: doubleBinding(for: index))
             }
 
         default:
             VStack(alignment: .leading, spacing: 6) {
-                Text(setting.name ?? "")
-                    .font(.body)
-                TextField(setting.placeholder ?? "请输入内容", text: binding(for: index))
-                    .font(.body)
-                    .padding(10)
-                    .background(Color(.tertiarySystemFill))
-                    .cornerRadius(10)
+                Text(title)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .foregroundColor(.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                DetailTextField(
+                    placeholder: setting.placeholder ?? "请输入内容",
+                    text: binding(for: index),
+                    isMonospaced: isMonospacedField
+                )
             }
         }
     }
-}
 
-struct AppSettingsView: View {
-    @Binding var settings: [Setting]
-
-    var body: some View {
-        if !settings.isEmpty {
-            ForEach(Array(settings.enumerated()), id: \.element.id) { index, setting in
-                FormSettingRow(setting: setting, index: index, settings: $settings)
-            }
-        }
+    /// Tokens, cookies and keys are strings users read character-by-character.
+    private var isMonospacedField: Bool {
+        let haystack = "\(setting.id) \(setting.name ?? "")".lowercased()
+        return ["cookie", "token", "key", "secret", "auth", "session"]
+            .contains { haystack.contains($0) }
     }
 }
 
@@ -493,85 +613,100 @@ struct AppDetailView: View {
     @State private var isSavingSettings = false
     @State private var isRunningScript = false
     @State private var keyboardHeight: CGFloat = 0
+    /// Key awaiting clear confirmation. Clearing writes empty values to the server
+    /// and cannot be undone, so it is never applied straight from a tap.
+    @State private var pendingClearKey: String? = nil
+
+    /// Snapshot of setting values taken on appear. Diffing against it drives both the
+    /// save button's state and the "已修改" filter, and lets saves skip untouched keys.
+    @State private var originalValues: [String: String] = [:]
+    @State private var settingsQuery = ""
+    @State private var settingsFilter: SettingsFilter = .all
+    /// Row membership captured when a filter is selected, so editing a visible row
+    /// never makes it jump out of the list mid-edit.
+    @State private var filterSnapshot: Set<String> = []
+
+    enum SettingsFilter: String, CaseIterable {
+        case all = "全部"
+        case modified = "已修改"
+        case empty = "未填写"
+    }
+
+    /// `Setting` has no grouping field, so a large list is navigated by search, not sections.
+    private var showsSettingsSearch: Bool { (app?.settings?.count ?? 0) > 12 }
+    private var showsSettingsFilter: Bool { (app?.settings?.count ?? 0) > 20 }
+
+    private var modifiedSettingIds: Set<String> {
+        guard !originalValues.isEmpty else { return [] }
+        return Set((app?.settings ?? [])
+            .filter { originalValues[$0.id] != Self.comparableValue($0.val) }
+            .map(\.id))
+    }
+
+    private var hasUnsavedChanges: Bool { !modifiedSettingIds.isEmpty }
 
     var body: some View {
         if let app = app {
             withAppBottomActions(
-                Form {
-                    // MARK: App Info
-                    Section {
-                        AppHeaderView(app: app)
-                    }
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-
-                    if app.hasDescription {
-                        Section {
-                            AppDescCardView(app: app)
+                ScrollView {
+                    LazyVStack(spacing: DetailMetrics.groupSpacing) {
+                        // MARK: App Info
+                        DetailCard {
+                            AppHeaderView(
+                                app: app,
+                                isFavorite: isFavorite(app),
+                                onToggleFavorite: { toggleFav(app) },
+                                dataCount: cachedAppDataInfo.datas.count,
+                                sessionName: cachedAppDataInfo.curSession?.name,
+                                lastRunText: nil
+                            )
                         }
-                    }
 
-                    // MARK: Scripts
-                    if let scripts = app.scripts, !scripts.isEmpty {
-                        Section {
-                            AppScriptsView(scripts: scripts) { resp in
-                                scriptResult = resp
-                                showScriptResult = true
+                        if app.hasDescription {
+                            DetailCard {
+                                AppDescCardView(app: app)
+                                    .padding(DetailMetrics.rowHPadding)
                             }
-                        } header: {
-                            Text("应用脚本")
                         }
-                    }
 
-                    // MARK: Settings
-                    let settings = app.settings ?? []
-                    if !settings.isEmpty {
-                        Section {
-                            AppSettingsView(settings: bindingForSettings())
-                        } header: {
-                            Text("应用设置")
-                        }
-                    }
-
-                    // MARK: Session Data
-                    if app.keys != nil && !cachedAppDataInfo.datas.isEmpty {
-                        appSessionDataSection(app: app)
-                    }
-
-                    // MARK: Sessions
-                    if !cachedAppDataInfo.sessions.isEmpty {
-                        Section {
-                            ForEach(Array(cachedAppDataInfo.sessions.enumerated()), id: \.element.id) { index, session in
-                                sessionRow(session: session, index: index, app: app)
+                        // MARK: Scripts
+                        if let scripts = app.scripts, !scripts.isEmpty {
+                            DetailGroup(title: "脚本") {
+                                AppScriptsView(scripts: scripts) { resp in
+                                    scriptResult = resp
+                                    showScriptResult = true
+                                }
                             }
-                        } header: {
-                            Text("历史会话")
+                        }
+
+                        // MARK: Settings
+                        let settings = app.settings ?? []
+                        if !settings.isEmpty {
+                            settingsGroup(settings: settings)
+                        }
+
+                        // MARK: Session Data
+                        if app.keys != nil && !cachedAppDataInfo.datas.isEmpty {
+                            appSessionDataSection(app: app)
+                        }
+
+                        // MARK: Sessions
+                        if !cachedAppDataInfo.sessions.isEmpty {
+                            sessionsGroup(app: app)
                         }
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 20)
                 }
                 .neboxDismissKeyboardOnScroll()
-                .modifier(GroupedFormStyle())
-                // Form 默认铺一层不透明的 systemGroupedBackground，会把壁纸整个盖掉。
-                // 掀掉它，改由 RelayPageBackground 打底（分组行自己的 bgCard 不受影响）。
-                .modifier(HideScrollContentBackground())
                 .background(RelayPageBackground())
                 // 沉浸式导航栏：push 进来的详情页，标题常显（页内没有替代性大标题
-                // ——头部卡片是图标 + 元信息，不是大字应用名）。这层就是承载滚动的
-                // Form，所以 ownsScrollEdge 用默认值。
+                // ——头部卡片是图标 + 元信息，不是大字应用名）。
                 .navigationBar(.init(
                     chrome: .plain(background: .gradientTop),
                     title: .fixed(app.name)
-                ))
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            toggleFav(app)
-                        } label: {
-                            Image(systemName: isFavorite(app) ? "heart.fill" : "heart")
-                                .foregroundColor(isFavorite(app) ? .red : .secondary)
-                                .font(.system(size: 17))
-                        }
-                    }
-                },
+                )),
                 app: app
             )
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
@@ -596,6 +731,7 @@ struct AppDetailView: View {
             }
             .onAppear {
                 refreshCachedAppDataInfo()
+                captureSettingsSnapshot()
             }
             .onReceive(boxModel.$boxData) { _ in
                 refreshCachedAppDataInfo()
@@ -609,20 +745,16 @@ struct AppDetailView: View {
         // the compile-time guard on top of the runtime `#available` check.
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            content.toolbar {
-                ToolbarItem(placement: .bottomBar) {
-                    appOverflowMenu(app: app)
-                }
-
-                ToolbarSpacer(.flexible, placement: .bottomBar)
-
-                ToolbarItemGroup(placement: .bottomBar) {
-                    appSaveToolbarButton(app: app)
-                    if let script = app.script, !script.isEmpty {
-                        appRunToolbarButton(script: script)
+            content
+                .toolbar {
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        appSaveToolbarButton(app: app)
+                        if let script = app.script, !script.isEmpty {
+                            appRunToolbarButton(script: script)
+                        }
                     }
                 }
-            }
+                .modifier(AppOverflowToolbar(menu: appOverflowMenu(app: app)))
         } else {
             appLegacyBottomActions(content, app: app)
         }
@@ -633,91 +765,386 @@ struct AppDetailView: View {
 
     @ViewBuilder
     private func appLegacyBottomActions<Content: View>(_ content: Content, app: AppModel) -> some View {
-        content.safeAreaInset(edge: .bottom) {
-            appLegacyBottomActionBar(app: app)
-                .offset(y: keyboardHeight)
-        }
+        content
+            .safeAreaInset(edge: .bottom) {
+                appLegacyBottomActionBar(app: app)
+                    .offset(y: keyboardHeight)
+            }
+            .modifier(AppOverflowToolbar(menu: appOverflowMenu(app: app)))
     }
 
     // MARK: - Current Session Data Section
 
     private func appSessionDataSection(app: AppModel) -> some View {
-        Section {
-            ForEach(cachedAppDataInfo.datas, id: \.key) { data in
-                let valStr = dataValString(data.val)
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(data.key)
-                            .font(.system(size: 14, weight: .medium))
-                        Text(valStr.isEmpty ? "无数据" : valStr)
-                            .font(.system(size: 13))
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                    }
-                    Spacer()
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color(.tertiaryLabel))
-                    Button {
-                        boxModel.clearAppDatas(app: app, key: data.key)
-                        toastManager.showToast(message: "已清除")
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color(.tertiaryLabel))
-                    }
-                    .buttonStyle(.plain)
+        let title = cachedAppDataInfo.curSession.map { "当前会话 · \($0.name)" } ?? "当前会话"
+
+        return DetailGroup(title: title, actionTitle: "克隆") {
+            boxModel.saveAppSession(app: app, datas: cachedAppDataInfo.datas)
+            toastManager.showToast(message: "已克隆会话")
+        } content: {
+            ForEach(Array(cachedAppDataInfo.datas.enumerated()), id: \.element.key) { index, data in
+                if index > 0 { DetailRowDivider() }
+                dataRow(data)
+            }
+        }
+        .confirmationDialog(
+            "清除「\(pendingClearKey ?? "")」的数据？",
+            isPresented: Binding(
+                get: { pendingClearKey != nil },
+                set: { if !$0 { pendingClearKey = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("清除", role: .destructive) {
+                if let key = pendingClearKey {
+                    boxModel.clearAppDatas(app: app, key: key)
+                    toastManager.showToast(message: "已清除")
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    copyToClipboard(text: valStr)
-                    toastManager.showToast(message: "已复制")
+                pendingClearKey = nil
+            }
+            Button("取消", role: .cancel) { pendingClearKey = nil }
+        } message: {
+            Text("该操作会清空此项数据且无法撤销。")
+        }
+    }
+
+    // MARK: - Settings
+
+    @ViewBuilder
+    private func settingsGroup(settings: [Setting]) -> some View {
+        let visible = visibleSettingIndices(in: settings)
+
+        // Header, search and chips all live inside the card so nothing but the card
+        // itself ever sits on the wallpaper.
+        DetailCard {
+            DetailGroupHeader(
+                title: "设置 · \(settings.count) 项",
+                actionTitle: hasUnsavedChanges ? "撤销" : nil,
+                action: hasUnsavedChanges ? revertSettings : nil
+            )
+
+            if showsSettingsSearch || showsSettingsFilter {
+                DetailRowDivider()
+                VStack(spacing: 8) {
+                    if showsSettingsSearch {
+                        HStack(spacing: 7) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 13))
+                                .foregroundColor(.textTertiary)
+                            TextField("搜索设置项", text: $settingsQuery)
+                                .font(.system(size: 13.5))
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                            if !settingsQuery.isEmpty {
+                                Button {
+                                    settingsQuery = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.textTertiary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.bgMuted, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    }
+
+                    if showsSettingsFilter {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(SettingsFilter.allCases, id: \.self) { filter in
+                                    filterChip(filter, settings: settings)
+                                }
+                            }
+                            .padding(.horizontal, 1)
+                        }
+                    }
                 }
+                .padding(.horizontal, DetailMetrics.rowHPadding)
+                .padding(.vertical, 10)
             }
 
-            Button {
-                boxModel.saveAppSession(app: app, datas: cachedAppDataInfo.datas)
-                toastManager.showToast(message: "已克隆会话")
-            } label: {
-                Label("克隆当前会话", systemImage: "doc.on.doc")
-                    .font(.system(size: 14))
-            }
-        } header: {
-            HStack {
-                Text("当前会话")
-                if let curSession = cachedAppDataInfo.curSession {
-                    Text(curSession.name)
-                        .foregroundColor(.accentColor)
+            DetailRowDivider()
+
+            if visible.isEmpty {
+                Text("没有匹配的设置项")
+                    .font(.system(size: 13))
+                    .foregroundColor(.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 24)
+            } else {
+                ForEach(Array(visible.enumerated()), id: \.element) { position, index in
+                    if position > 0 { DetailRowDivider() }
+                    FormSettingRow(
+                        setting: settings[index],
+                        index: index,
+                        settings: bindingForSettings()
+                    )
                 }
             }
         }
     }
 
-    // MARK: - Session Row
+    private func filterChip(_ filter: SettingsFilter, settings: [Setting]) -> some View {
+        let isOn = settingsFilter == filter
+        let count: Int? = {
+            switch filter {
+            case .all: return nil
+            case .modified: return modifiedSettingIds.count
+            case .empty: return settings.filter { Self.isEmptyValue($0.val) }.count
+            }
+        }()
 
-    private func sessionRow(session: Session, index: Int, app: AppModel) -> some View {
-        let isCurrent = cachedAppDataInfo.curSession?.id == session.id
-
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                HStack(spacing: 6) {
-                    Text("#\(index + 1)")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(isCurrent ? Color.accentColor : Color(.tertiaryLabel), in: Capsule())
-                    Text(session.name)
-                        .font(.system(size: 15, weight: isCurrent ? .semibold : .regular))
-                        .foregroundColor(isCurrent ? .accentColor : .primary)
+        return Button {
+            settingsFilter = filter
+            filterSnapshot = Self.membership(for: filter, in: settings, modified: modifiedSettingIds)
+        } label: {
+            HStack(spacing: 4) {
+                Text(filter.rawValue)
+                if let count, count > 0 {
+                    Text("\(count)")
+                        .monospacedDigit()
+                        .opacity(0.75)
                 }
-                Spacer()
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(isOn ? .bgCard : .textSecondary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(isOn ? Color.textPrimary : Color.bgCard)
+            )
+            .overlay(
+                Capsule().strokeBorder(isOn ? Color.clear : Color.borderSubtle, lineWidth: 1)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Indices into the unfiltered array — `FormSettingRow` writes back by index.
+    private func visibleSettingIndices(in settings: [Setting]) -> [Int] {
+        let query = settingsQuery.trimmingCharacters(in: .whitespaces).lowercased()
+
+        return settings.indices.filter { index in
+            let setting = settings[index]
+
+            if showsSettingsFilter {
+                switch settingsFilter {
+                case .all: break
+                case .modified:
+                    // Membership is frozen when the filter is picked. Recomputing live
+                    // would make a row vanish the moment you edited it back to its
+                    // original value — or appear under your finger as you typed.
+                    guard filterSnapshot.contains(setting.id) else { return false }
+                case .empty:
+                    guard filterSnapshot.contains(setting.id) else { return false }
+                }
+            }
+
+            guard showsSettingsSearch, !query.isEmpty else { return true }
+            return setting.id.lowercased().contains(query)
+                || (setting.name ?? "").lowercased().contains(query)
+        }
+    }
+
+    private func revertSettings() {
+        guard var settings = app?.settings else { return }
+        for index in settings.indices {
+            if let original = originalValues[settings[index].id] {
+                settings[index].val = original.isEmpty ? AnyCodable(nil) : AnyCodable(original)
+            }
+        }
+        app?.settings = settings
+        toastManager.showToast(message: "已撤销改动")
+    }
+
+    private func captureSettingsSnapshot() {
+        // Only snapshot once per visit; re-capturing would erase pending edits.
+        guard originalValues.isEmpty, let settings = app?.settings, !settings.isEmpty else { return }
+        originalValues = Dictionary(
+            settings.map { ($0.id, Self.comparableValue($0.val)) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// Stable string form used for diffing — AnyCodable is not Equatable.
+    private static func comparableValue(_ val: AnyCodable?) -> String {
+        guard let value = val?.value else { return "" }
+        if value is NSNull { return "" }
+        if let s = value as? String { return s }
+        if let b = value as? Bool { return b ? "true" : "false" }
+        if let arr = value as? [String] { return arr.joined(separator: ",") }
+        if let encoded = try? JSONEncoder().encode(AnyCodable(value)),
+           let str = String(data: encoded, encoding: .utf8) {
+            return str
+        }
+        return String(describing: value)
+    }
+
+    private static func isEmptyValue(_ val: AnyCodable?) -> Bool {
+        comparableValue(val).isEmpty
+    }
+
+    private static func membership(
+        for filter: SettingsFilter,
+        in settings: [Setting],
+        modified: Set<String>
+    ) -> Set<String> {
+        switch filter {
+        case .all:      return Set(settings.map(\.id))
+        case .modified: return modified
+        case .empty:    return Set(settings.filter { isEmptyValue($0.val) }.map(\.id))
+        }
+    }
+
+    // MARK: - Current Session Data Row
+
+    /// Two lines: the key reads as a label, the value gets the full row width beneath it.
+    /// Long values (tokens, JSON) are unreadable when squeezed into a trailing column.
+    private func dataRow(_ data: SessionData) -> some View {
+        let valStr = dataValString(data.val)
+        let isEmpty = valStr.isEmpty
+        // Only surface the type when it is *not* plain text — "TEXT" on every row is noise.
+        let typeLabel = SettingValue.typeLabel(data.val).flatMap { $0 == "TEXT" ? nil : $0 }
+
+        return HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(data.key)
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundColor(.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let typeLabel {
+                        Text(typeLabel)
+                            .font(.system(size: 9, weight: .semibold))
+                            .tracking(0.4)
+                            .foregroundColor(.textTertiary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.bgMuted, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                Text(isEmpty ? "无数据" : valStr)
+                    .font(isEmpty
+                          ? .system(size: 13).italic()
+                          : .system(size: 13, design: .monospaced))
+                    .foregroundColor(isEmpty ? .textTertiary : .textPrimary)
+                    // Head truncation keeps the tail visible — the end of a token or
+                    // path is what distinguishes one value from another.
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // One menu instead of two always-on icon buttons; clearing is destructive
+            // and no longer sits a few points away from copy.
+            Menu {
+                Button {
+                    copyToClipboard(text: valStr)
+                    toastManager.showToast(message: "已复制")
+                } label: {
+                    Label("复制值", systemImage: "doc.on.doc")
+                }
+                .disabled(isEmpty)
+
+                Button {
+                    copyToClipboard(text: data.key)
+                    toastManager.showToast(message: "已复制键名")
+                } label: {
+                    Label("复制键名", systemImage: "textformat.abc")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    pendingClearKey = data.key
+                } label: {
+                    Label("清除", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.textTertiary)
+                    .frame(width: 28, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("\(data.key) 操作")
+        }
+        .padding(.leading, DetailMetrics.rowHPadding)
+        .padding(.trailing, 6)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !isEmpty else { return }
+            copyToClipboard(text: valStr)
+            toastManager.showToast(message: "已复制")
+        }
+    }
+
+    // MARK: - Sessions
+
+    private func sessionsGroup(app: AppModel) -> some View {
+        // Current session floats to the top — it is the one users check most.
+        let sessions = cachedAppDataInfo.sessions.sorted { lhs, _ in
+            cachedAppDataInfo.curSession?.id == lhs.id
+        }
+
+        return DetailGroup(
+            title: "历史会话 · \(sessions.count)",
+            actionTitle: "导入",
+            action: { showImportSession = true }
+        ) {
+            ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
+                if index > 0 { DetailRowDivider() }
+                sessionRow(session: session, app: app)
+            }
+        }
+    }
+
+    private func sessionRow(session: Session, app: AppModel) -> some View {
+        let isCurrent = cachedAppDataInfo.curSession?.id == session.id
+        // Preview caps at 3 rows so one fat session cannot fill the screen.
+        let preview = Array(session.datas.prefix(3))
+        let overflow = session.datas.count - preview.count
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Text(session.name)
+                    .font(.system(size: 14, weight: isCurrent ? .semibold : .medium))
+                    .foregroundColor(isCurrent ? .accent : .textPrimary)
+                    .lineLimit(1)
+
+                if isCurrent {
+                    Text("使用中")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .tracking(0.4)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(Color.accent, in: Capsule())
+                }
+
+                Spacer(minLength: 0)
+
                 Menu {
+                    Button {
+                        boxModel.linkAppSession(sessionId: session.id, appId: app.id)
+                        toastManager.showToast(message: "已关联")
+                    } label: {
+                        Label("关联到此会话", systemImage: "link")
+                    }
                     Button {
                         copySession(session)
                     } label: {
                         Label("复制会话", systemImage: "doc.on.doc")
                     }
+                    Divider()
                     Button(role: .destructive) {
                         boxModel.delAppSession(sessionId: session.id)
                         toastManager.showToast(message: "已删除")
@@ -726,70 +1153,72 @@ struct AppDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 24, height: 24)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.textTertiary)
+                        .frame(width: 30, height: 26)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("会话操作")
             }
 
-            if !session.datas.isEmpty {
+            if !preview.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(session.datas, id: \.key) { data in
+                    ForEach(preview, id: \.key) { data in
                         let valStr = dataValString(data.val)
-                        HStack(alignment: .top, spacing: 6) {
+                        HStack(spacing: 8) {
                             Text(data.key)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(valStr.isEmpty ? "无数据" : valStr)
-                                .font(.system(size: 13))
-                                .foregroundColor(.secondary)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.textSecondary)
                                 .lineLimit(1)
-                                .frame(maxWidth: 180, alignment: .trailing)
+                                .layoutPriority(1)
+                            Text(valStr.isEmpty ? "无数据" : valStr)
+                                .font(.system(size: 11))
+                                .foregroundColor(.textSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
+                    if overflow > 0 {
+                        Text("还有 \(overflow) 项")
+                            .font(.system(size: 11))
+                            .foregroundColor(.textTertiary)
+                    }
                 }
-                .padding(10)
-                .background(Color(.tertiarySystemFill))
-                .cornerRadius(8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.bgMuted, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
 
-            HStack {
-                Text(session.createTime.prefix(19).replacingOccurrences(of: "T", with: " "))
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button {
-                    boxModel.useAppSession(sessionId: session.id, appId: app.id)
-                    toastManager.showToast(message: "已使用")
-                } label: {
-                    Text("使用")
-                        .font(.system(size: 13, weight: .medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
-                        .contentShape(Capsule())
+            HStack(spacing: 8) {
+                Text(RelativeTime.string(from: session.createTime))
+                    .font(.system(size: 11))
+                    .foregroundColor(.textTertiary)
+                    // Full timestamp stays reachable without spending a row on it.
+                    .accessibilityLabel(RelativeTime.absolute(from: session.createTime))
+                Spacer(minLength: 0)
+
+                // Only one primary action per row now; "关联" moved into the menu.
+                if !isCurrent {
+                    Button {
+                        boxModel.useAppSession(sessionId: session.id, appId: app.id)
+                        toastManager.showToast(message: "已切换")
+                    } label: {
+                        Text("切换")
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundColor(.accent)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 5)
+                            .background(Color.accent.opacity(0.12), in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(.accentColor)
-                Button {
-                    boxModel.linkAppSession(sessionId: session.id, appId: app.id)
-                    toastManager.showToast(message: "已关联")
-                } label: {
-                    Text("关联")
-                        .font(.system(size: 13, weight: .medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(Color(.tertiarySystemFill), in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.primary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, DetailMetrics.rowHPadding)
+        .padding(.vertical, DetailMetrics.rowVPadding)
     }
 
     // MARK: - Import Session Sheet
@@ -883,7 +1312,8 @@ struct AppDetailView: View {
         )
     }
 
-    @available(iOS 26.0, *)
+    /// Secondary operations (import / copy / clear). These are page-level actions on
+    /// the app itself, not the bar's save-and-run pair, so they belong in the nav bar.
     private func appOverflowMenu(app: AppModel) -> some View {
         Menu {
             Button {
@@ -917,6 +1347,7 @@ struct AppDetailView: View {
             }
         } label: {
             Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
         }
         .accessibilityLabel("更多操作")
     }
@@ -937,15 +1368,17 @@ struct AppDetailView: View {
                     .controlSize(.small)
                     .frame(width: 22, height: 22, alignment: .center)
             } else {
+                // The toolbar has no room for a count, so dirty state is colour only.
                 Label("保存", systemImage: "square.and.arrow.down")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(hasUnsavedChanges ? .accent : .textSecondary)
                     .frame(width: 22, height: 22, alignment: .center)
             }
         }
         .frame(minWidth: 32, minHeight: 32, alignment: .center)
         .disabled(isSavingSettings)
-        .accessibilityLabel("保存")
+        .accessibilityLabel(hasUnsavedChanges ? "保存，有未保存的改动" : "保存")
     }
 
     @available(iOS 26.0, *)
@@ -975,153 +1408,85 @@ struct AppDetailView: View {
         .accessibilityLabel("运行")
     }
 
+    /// Floating capsule rather than a full-width bar: a bar cuts the page in two and
+    /// hides a strip of wallpaper, and it shares no shape language with the app's own
+    /// floating tab bar. This uses the same glass pane that tab bar does.
     private func appLegacyBottomActionBar(app: AppModel) -> some View {
         let hasRun = app.script?.isEmpty == false
 
-        return VStack(spacing: 0) {
-            Divider()
-
-            HStack(spacing: 10) {
-                Menu {
-                    Button {
-                        showImportSession = true
-                    } label: {
-                        Label("导入会话", systemImage: "square.and.arrow.down")
-                    }
-                    Button(action: copyAppDatas) {
-                        Label("复制数据", systemImage: "doc.on.clipboard")
-                    }
-                    Button {
-                        if let session = cachedAppDataInfo.curSession {
-                            copySession(session)
-                        }
-                    } label: {
-                        Label("复制会话", systemImage: "doc.on.doc")
-                    }
-                    Button(role: .destructive) {
-                        Task {
-                            boxModel.clearAppDatas(app: app)
-                            toastManager.showToast(message: "已清除")
-                        }
-                    } label: {
-                        Label("清除数据", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.textPrimary)
-                        .frame(width: 48, height: 48)
-                        .background(
-                            Color.bgMuted,
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-                .accessibilityLabel("更多操作")
-
-                Button {
+        // The overflow menu now lives in the nav bar, so this capsule holds only the
+        // two actions that belong to the page's edit cycle.
+        return HStack(spacing: 8) {
+                // Save carries its own state: grey when clean, accent-tinted when there
+                // are edits, and solid only when it is the bar's single action.
+                DetailActionButton(
+                    title: "保存",
+                    systemImage: "square.and.arrow.down",
+                    emphasis: saveEmphasis(hasRun: hasRun),
+                    isBusy: isSavingSettings
+                ) {
                     Task { @MainActor in
                         guard !isSavingSettings else { return }
                         isSavingSettings = true
                         saveCurrentAppSettings(app: app)
                         isSavingSettings = false
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Group {
-                            if isSavingSettings {
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .tint(hasRun ? .textPrimary : .white)
-                            } else {
-                                Image(systemName: "square.and.arrow.down")
-                            }
-                        }
-                        .frame(width: 20, height: 20)
-                        Text("保存")
-                    }
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(hasRun ? .textPrimary : .white)
-                .background(
-                    hasRun ? Color.bgMuted : Color.accent,
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                )
-                .opacity(isSavingSettings ? 0.85 : 1)
-                .disabled(isSavingSettings)
-                .accessibilityLabel("保存")
+                .accessibilityLabel(hasUnsavedChanges ? "保存，有未保存的改动" : "保存")
 
                 if let script = app.script, !script.isEmpty {
-                    Button {
+                    DetailActionButton(
+                        title: "运行",
+                        systemImage: "play.fill",
+                        emphasis: .primary,
+                        isBusy: isRunningScript
+                    ) {
                         Task {
                             guard !isRunningScript else { return }
                             isRunningScript = true
                             await runAppScript(script)
                             isRunningScript = false
                         }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Group {
-                                if isRunningScript {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                        .tint(.white)
-                                } else {
-                                    Image(systemName: "play.circle.fill")
-                                }
-                            }
-                            .frame(width: 20, height: 20)
-                            Text("运行")
-                        }
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.white)
-                    .background(
-                        Color.accent,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    )
                     .shadow(color: Color.accent.opacity(0.13), radius: 10, x: 0, y: 4)
-                    .opacity(isRunningScript ? 0.85 : 1)
-                    .disabled(isRunningScript)
                     .accessibilityLabel("运行")
                 }
 
             }
-            .padding(.leading, 20)
-            .padding(.trailing, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
-        }
-        .frame(maxWidth: .infinity)
-        .background(
-            ZStack {
-                Color.bgCard.opacity(0.8)
-                Rectangle().fill(.ultraThinMaterial).opacity(0.35)
-            }
-            .ignoresSafeArea(edges: .bottom)
-        )
-        .overlay(
-            Rectangle()
-                .fill(Color.bgCard.opacity(0.25))
-                .frame(height: 0.5),
-            alignment: .top
-        )
-        .shadow(color: Color.black.opacity(0.1), radius: 16, x: 0, y: -4)
+            // Geometry mirrors `RelayTabBar` exactly — 64pt tall, 21pt side inset,
+            // 4pt off the bottom — so the capsule sits precisely where the tab bar
+            // does. The detail page replaces the tab bar; it should occupy its slot.
+            .padding(.horizontal, 6)
+            .frame(height: RelayTabBar.barHeight)
+            .background(RelayGlassBackground(cornerRadius: RelayTabBar.barHeight / 2))
+            .padding(.horizontal, 21)
+            .padding(.bottom, 4)
     }
 
     // MARK: - Helpers
 
+    /// Grey when clean; accent-tinted when dirty; solid only when it is the sole action.
+    private func saveEmphasis(hasRun: Bool) -> DetailActionButton.Emphasis {
+        guard hasUnsavedChanges else { return hasRun ? .neutral : .primary }
+        return hasRun ? .soft : .primary
+    }
+
     @MainActor
     private func saveCurrentAppSettings(app: AppModel) {
-        boxModel.saveData(params: (app.settings ?? []).map { setting in
+        let allSettings = app.settings ?? []
+        let changedIds = modifiedSettingIds
+        // Only push what actually changed. On first save of an untouched page the
+        // snapshot may be empty, so fall back to a full submit.
+        let payload = changedIds.isEmpty
+            ? allSettings
+            : allSettings.filter { changedIds.contains($0.id) }
+
+        guard !payload.isEmpty else {
+            toastManager.showToast(message: "没有需要保存的改动")
+            return
+        }
+
+        boxModel.saveData(params: payload.map { setting in
             let transformedVal: AnyCodable = {
                 if setting.type == "checkboxes", let arrayVal = setting.val?.value as? [String] {
                     return AnyCodable(arrayVal.joined(separator: ","))
@@ -1133,6 +1498,11 @@ struct AppDetailView: View {
             }()
             return SessionData(key: setting.id, val: transformedVal)
         })
+
+        // Saved values become the new baseline, returning the button to its clean state.
+        for setting in payload {
+            originalValues[setting.id] = Self.comparableValue(setting.val)
+        }
         toastManager.showToast(message: "保存成功!")
     }
 

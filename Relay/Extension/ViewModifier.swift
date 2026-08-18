@@ -184,6 +184,34 @@ func neboxNavigationContainer<Content: View>(@ViewBuilder _ content: () -> Conte
     }
 }
 
+
+/// Navigation container for a **tab root**.
+///
+/// On iOS < 26 the tabs are hosted by `RelayTabHost`, which already gives each tab a
+/// real `UINavigationController` as a direct child of the tab bar controller — the
+/// relationship `hidesBottomBarWhenPushed` depends on. Adding SwiftUI's own
+/// `NavigationStack` on top would nest a second navigation controller one level deeper,
+/// and pushes into it are invisible to the tab bar.
+///
+/// The navigation *bar* is unaffected either way: `RelayNavigationBar` renders through
+/// SwiftUI's toolbar API, which binds to whichever `UINavigationController` is hosting
+/// the view — the UIKit one here, SwiftUI's own on iOS 26.
+///
+/// On iOS 26 the system `TabView` supplies the tabs, so the SwiftUI container is still
+/// what provides navigation there.
+@ViewBuilder
+func neboxTabRootNavigationContainer<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    #if compiler(>=6.2)
+    if #available(iOS 26.0, *) {
+        neboxNavigationContainer { content() }
+    } else {
+        content()
+    }
+    #else
+    content()
+    #endif
+}
+
 extension View {
     /// Pushes `destination` using Transmission's `DestinationLink` zoom transition.
     ///
@@ -199,7 +227,16 @@ extension View {
         @ViewBuilder destination: @escaping () -> Destination
     ) -> some View {
         self.destination(
-            transition: .zoomIfAvailable,
+            // `hidesBottomBarWhenPushed` is what makes a pushed page take over the tab
+            // bar's space, exactly as in a native app. It works because `RelayTabHost`
+            // gives each tab a real `UINavigationController` directly under the tab bar
+            // controller. UIKit drives the slide-away and the return as part of the
+            // navigation transition, so no visibility state can lag behind the pop.
+            transition: .zoomIfAvailable(
+                .init(),
+                options: .init(hidesBottomBarWhenPushed: true),
+                otherwise: .default(options: .init(hidesBottomBarWhenPushed: true))
+            ),
             isPresented: isPresented,
             destination: {
                 // Transmission 在独立的 presentation host 里托管目标页，SwiftUI
@@ -233,24 +270,20 @@ extension View {
         }
     }
 
+    /// Hides the tab bar while this screen is on screen.
+    ///
+    /// On iOS < 26 this is a no-op: `RelayTabHost` hosts the tabs in a real
+    /// `UITabBarController`, and `hidesBottomBarWhenPushed` (set on the pushed
+    /// controller by `neboxNavigationDestination`) makes UIKit hide the bar as part of
+    /// the navigation transition. The preference key this used to post was the source
+    /// of the bar's late reappearance after a pop.
     @ViewBuilder
     func neboxHideTabBar() -> some View {
         if #available(iOS 26.0, *) {
-            self
-                .toolbar(.hidden, for: .tabBar)
+            self.toolbar(.hidden, for: .tabBar)
         } else {
             self
-                .preference(key: NEBoxHideTabBarPreferenceKey.self, value: true)
         }
-    }
-
-}
-
-struct NEBoxHideTabBarPreferenceKey: PreferenceKey {
-    static var defaultValue: Bool = false
-
-    static func reduce(value: inout Bool, nextValue: () -> Bool) {
-        value = value || nextValue()
     }
 }
 
