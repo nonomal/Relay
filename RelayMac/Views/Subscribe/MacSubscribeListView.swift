@@ -33,11 +33,11 @@ struct MacSubscribeListView: View {
                 MacRouteDestination(route: route)
             }
             .onAppear {
-                subscriptions = boxModel.boxData.usercfgs?.appsubs ?? []
+                subscriptions = Self.uniqueByURL(boxModel.boxData.appsubs)
                 updateChrome()
             }
             .onReceive(boxModel.$boxData) { data in
-                subscriptions = data.usercfgs?.appsubs ?? []
+                subscriptions = Self.uniqueByURL(data.appsubs)
                 updateChrome()
             }
             .alert("添加订阅", isPresented: $showAddDialog) {
@@ -48,6 +48,12 @@ struct MacSubscribeListView: View {
                 Text("请输入订阅链接地址")
             }
         }
+    }
+
+    /// One row per URL: a URL added twice shares one cache, and rows need unique ids.
+    private static func uniqueByURL(_ subs: [AppSub]) -> [AppSub] {
+        var seen = Set<String>()
+        return subs.filter { seen.insert($0.url).inserted }
     }
 
     private func summary(for sub: AppSub) -> AppSubSummary? {
@@ -93,36 +99,29 @@ struct MacSubscribeListView: View {
         withAnimation(.snappy) {
             subscriptions.move(fromOffsets: source, toOffset: destination)
         }
-        persistSubscriptions(message: "订阅顺序已更新")
+        // The stored entries are rearranged, not rebuilt, so their fields are kept.
+        boxModel.reorderAppSubs(urls: subscriptions.map(\.url))
+        toastManager.showToast(message: "订阅顺序已更新")
+        Task { await boxModel.flushPendingDataUpdates() }
     }
 
     private func deleteSubscriptions(at offsets: IndexSet) {
         let urls = offsets.map { subscriptions[$0].url }
         subscriptions.remove(atOffsets: offsets)
-        boxModel.updateData(path: "usercfgs.appsubs", data: encodedSubscriptions())
-        for url in urls {
-            Task { await boxModel.deleteAppSub(url: url) }
+        // One at a time: BoxJS rewrites the whole list per request, so concurrent
+        // deletes could each write back a list still holding the other's entry.
+        Task {
+            for url in urls {
+                await boxModel.deleteAppSub(url: url)
+            }
         }
         toastManager.showToast(message: "已删除订阅")
     }
 
     private func deleteSubscription(_ url: String) {
         subscriptions.removeAll { $0.url == url }
-        boxModel.updateData(path: "usercfgs.appsubs", data: encodedSubscriptions())
         Task { await boxModel.deleteAppSub(url: url) }
         toastManager.showToast(message: "已删除订阅")
-    }
-
-    private func persistSubscriptions(message: String) {
-        boxModel.updateData(path: "usercfgs.appsubs", data: encodedSubscriptions())
-        toastManager.showToast(message: message)
-        Task { await boxModel.flushPendingDataUpdates() }
-    }
-
-    // JSONSerialization (used by the update endpoint) can't encode Swift
-    // Codable structs — flatten to plain dictionaries before sending.
-    private func encodedSubscriptions() -> [[String: Any]] {
-        subscriptions.map { ["url": $0.url, "enable": $0.enable, "id": $0.id ?? ""] }
     }
 
     private func addSubscription() {

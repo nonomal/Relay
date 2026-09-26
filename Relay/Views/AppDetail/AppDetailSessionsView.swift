@@ -11,7 +11,6 @@
 //
 
 import SwiftUI
-import AnyCodable
 
 // MARK: - Current session data
 
@@ -50,7 +49,7 @@ private struct AppSessionDataRow: View {
 
     @EnvironmentObject private var toastManager: ToastManager
 
-    private var valueText: String { SessionValueFormatter.string(data.val) }
+    private var valueText: String { data.val.displayText }
     private var isEmpty: Bool { valueText.isEmpty }
     /// Only surface the type when it is *not* plain text — "TEXT" on every row is noise.
     private var typeLabel: String? {
@@ -235,7 +234,7 @@ private struct AppSessionRow: View {
     private var previewBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(preview, id: \.key) { data in
-                let valStr = SessionValueFormatter.string(data.val)
+                let valStr = data.val.displayText
                 HStack(spacing: 8) {
                     Text(data.key)
                         .font(.system(size: 11, design: .monospaced))
@@ -311,22 +310,5 @@ private struct AppSessionRow: View {
     private func delete() {
         boxModel.delAppSession(sessionId: session.id)
         toastManager.showToast(message: "已删除")
-    }
-}
-
-// MARK: - Value formatting
-
-/// Renders a stored value for display. Shared so the detail page and the session rows
-/// cannot drift apart on how a value is stringified.
-enum SessionValueFormatter {
-    private static let encoder = JSONEncoder()
-
-    static func string(_ val: AnyCodable?) -> String {
-        guard let val else { return "" }
-        if let str = val.value as? String { return str }
-        if let data = try? encoder.encode(val), let str = String(data: data, encoding: .utf8) {
-            return str
-        }
-        return String(describing: val.value)
     }
 }

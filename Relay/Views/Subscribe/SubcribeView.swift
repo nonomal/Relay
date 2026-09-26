@@ -56,8 +56,10 @@ struct SubcribeView: View {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
                         Task {
-                            await boxModel.reloadAllAppSub()
-                            toastManager.showToast(message: "已刷新全部订阅")
+                            // Failures and partial refreshes report themselves.
+                            if await boxModel.reloadAllAppSub() == .refreshed {
+                                toastManager.showToast(message: "已刷新全部订阅")
+                            }
                         }
                     } label: {
                         Image(systemName: "arrow.triangle.2.circlepath")

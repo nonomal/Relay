@@ -151,15 +151,12 @@ struct SubGridView: View {
         Task { await boxModel.deleteAppSub(url: url) }
     }
 
-    /// Maps the reordered summaries back onto the stored `appsubs` entries so the
-    /// server keeps each subscription's `enable`/`id` fields intact.
+    /// Persists the new order. The view model rearranges the stored `appsubs` entries
+    /// themselves, so fields and entries this list does not show are kept.
     private func persistOrder() {
-        let subs = boxModel.boxData.appsubs
-        let reordered = items
-            .compactMap { ordered in subs.first { $0.url == ordered.url } }
-            .map { ["url": $0.url, "enable": $0.enable, "id": $0.id ?? ""] as [String: Any] }
+        let urls = items.compactMap(\.url)
         Task { @MainActor in
-            boxModel.updateData(path: "usercfgs.appsubs", data: reordered)
+            boxModel.reorderAppSubs(urls: urls)
         }
     }
 }

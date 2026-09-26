@@ -3,7 +3,6 @@
 //  RelayMac
 //
 
-import AnyCodable
 import SwiftUI
 
 struct MacAppDetailView: View {
@@ -13,7 +12,10 @@ struct MacAppDetailView: View {
     @EnvironmentObject var chrome: WindowChromeModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var drafts: [String: AnyCodable?] = [:]
+    /// Setting values as edited, keyed by setting id; seeded once on appear.
+    @State private var drafts: [String: JSONValue] = [:]
+    /// The seeded values, so saving writes back only what was edited.
+    @State private var originals: [String: JSONValue] = [:]
     @State private var saving: Bool = false
     @State private var renameTarget: Session?
     @State private var showImportSession: Bool = false
@@ -32,14 +34,14 @@ struct MacAppDetailView: View {
         .background {
             Button("", action: save)
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(drafts.isEmpty || saving)
+                .disabled(!hasChanges || saving)
                 .hidden()
         }
         .onAppear {
             primeDrafts()
             updateChrome()
         }
-        .onChange(of: drafts.isEmpty) { _, _ in updateChrome() }
+        .onChange(of: hasChanges) { _, _ in updateChrome() }
         .onChange(of: saving) { _, _ in updateChrome() }
         .onReceive(boxModel.$boxData) { _ in updateChrome() }
         .popover(item: $renameTarget, arrowEdge: .trailing) { session in
@@ -216,21 +218,33 @@ struct MacAppDetailView: View {
     private func primeDrafts() {
         guard drafts.isEmpty, let settings = app.settings else { return }
         for setting in settings {
-            if let existing = boxModel.boxData.datas[setting.id] {
-                drafts[setting.id] = existing
-            } else if let val = setting.val {
-                drafts[setting.id] = val
-            } else {
-                drafts[setting.id] = nil
-            }
+            // A value saved since the app list was fetched is only in `datas` so far.
+            let stored = boxModel.boxData.datas[setting.id].flatMap { $0.isNull ? nil : $0 }
+            drafts[setting.id] = stored ?? setting.val
         }
+        originals = drafts
     }
 
-    private func binding(for setting: Setting) -> Binding<AnyCodable?> {
+    private func binding(for setting: Setting) -> Binding<JSONValue> {
         Binding(
             get: { drafts[setting.id] ?? setting.val },
             set: { drafts[setting.id] = $0 }
         )
+    }
+
+    /// Settings whose value differs from the seeded one as BoxJS would store it.
+    private var changedSettings: [Setting] {
+        (app.settings ?? []).compactMap { setting in
+            guard let draft = drafts[setting.id],
+                  draft.wireText != originals[setting.id]?.wireText else { return nil }
+            var edited = setting
+            edited.val = draft
+            return edited
+        }
+    }
+
+    private var hasChanges: Bool {
+        !changedSettings.isEmpty
     }
 
     private func updateChrome() {
@@ -270,7 +284,7 @@ struct MacAppDetailView: View {
                 title: "保存",
                 systemImage: "tray.and.arrow.down",
                 isPrimary: true,
-                isDisabled: drafts.isEmpty || saving,
+                isDisabled: !hasChanges || saving,
                 kind: .button(action: save)
             ),
             WindowChromeAction(
@@ -282,9 +296,13 @@ struct MacAppDetailView: View {
     }
 
     private func save() {
+        let changed = changedSettings
+        guard !changed.isEmpty else { return }
         saving = true
-        let params: [SessionData] = drafts.map { SessionData(key: $0.key, val: $0.value) }
-        boxModel.saveData(params: params)
+        boxModel.saveSettings(changed)
+        for setting in changed {
+            originals[setting.id] = setting.val
+        }
         toastManager.showToast(message: "已提交")
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 400_000_000)
@@ -303,35 +321,18 @@ struct MacAppDetailView: View {
         return boxModel.boxData.sessions.first { $0.id == id }
     }
 
+    /// Same shape as the web UI's copy: `{ key: value }` with values in their stored types.
     private func copyAppDatas() {
-        var result: [String: String] = [:]
+        var result: [String: JSONValue] = [:]
         for key in appKeys {
-            let val = boxModel.boxData.datas[key] ?? nil
-            result[key] = dataValString(val)
+            result[key] = boxModel.boxData.datas[key] ?? .null
         }
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: result),
-              let str = String(data: jsonData, encoding: .utf8) else { return }
-        PlatformBridge.copyToPasteboard(str)
+        PlatformBridge.copyToPasteboard(JSONValue.object(result).compactJSONText)
         toastManager.showToast(message: "已复制数据")
     }
 
     private func copySession(_ session: Session) {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(session),
-              let str = String(data: data, encoding: .utf8) else { return }
-        PlatformBridge.copyToPasteboard(str)
+        PlatformBridge.copyToPasteboard(session.jsonValue.prettyJSONText)
         toastManager.showToast(message: "已复制会话")
-    }
-
-    private func dataValString(_ val: AnyCodable?) -> String {
-        guard let val else { return "" }
-        if let str = val.value as? String { return str }
-        let encoder = JSONEncoder()
-        if let data = try? encoder.encode(val),
-           let str = String(data: data, encoding: .utf8) {
-            return str
-        }
-        return String(describing: val.value)
     }
 }

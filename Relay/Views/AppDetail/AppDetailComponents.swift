@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AnyCodable
 
 // MARK: - Layout Metrics
 
@@ -525,17 +524,16 @@ enum RelativeTime {
 
 enum SettingValue {
     /// Classifies a stored value so data rows can show a type chip.
-    static func typeLabel(_ val: AnyCodable?) -> String? {
-        guard let value = val?.value else { return nil }
-        switch value {
-        case is Bool: return "BOOL"
-        case is Int, is Double: return "NUM"
-        case let s as String:
+    static func typeLabel(_ val: JSONValue) -> String? {
+        switch val {
+        case .bool: return "BOOL"
+        case .number: return "NUM"
+        case .string(let s):
             let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") { return "JSON" }
             return trimmed.isEmpty ? nil : "TEXT"
-        case is [Any], is [String: Any]: return "JSON"
-        default: return nil
+        case .array, .object: return "JSON"
+        case .null: return nil
         }
     }
 }

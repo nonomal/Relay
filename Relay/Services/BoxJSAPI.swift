@@ -6,7 +6,6 @@
 import Foundation
 import Moya
 import Alamofire
-import AnyCodable
 
 enum BoxJSAPI {
     // MARK: - Queries
@@ -16,13 +15,14 @@ enum BoxJSAPI {
     case loadGlobalBak(id: String)
 
     // MARK: - Mutations (dict body)
-    case updateData(path: String, val: Any)
+    case updateData(path: String, val: JSONValue)
     case reloadAppSub(url: String)
     case reloadAllAppSub
     case addAppSub(url: String, id: String)
     case addAppSubRaw(json: String, id: String, name: String?)
     case deleteAppSub(url: String)
-    case runScript(url: String)
+    /// `timeout` (seconds) is the app's or script's `script_timeout`, as the web UI sends it.
+    case runScript(url: String, timeout: Double? = nil)
     case runTxtScript(script: String)
     case saveDataKV(key: String, val: String)
     case saveGlobalBak(bak: [String: Any])
@@ -103,7 +103,7 @@ extension BoxJSAPI: TargetType {
 
         // POST — dict body
         case .updateData(let path, let val):
-            return .requestParameters(parameters: ["path": path, "val": val], encoding: JSONEncoding.default)
+            return .requestParameters(parameters: ["path": path, "val": val.foundationObject], encoding: JSONEncoding.default)
 
         case .reloadAllAppSub:
             return .requestPlain
@@ -122,8 +122,10 @@ extension BoxJSAPI: TargetType {
         case .deleteAppSub(let url):
             return .requestParameters(parameters: ["url": url], encoding: JSONEncoding.default)
 
-        case .runScript(let url):
-            return .requestParameters(parameters: ["url": url, "isRemote": true], encoding: JSONEncoding.default)
+        case .runScript(let url, let timeout):
+            var params: [String: Any] = ["url": url, "isRemote": true]
+            if let timeout { params["timeout"] = timeout }
+            return .requestParameters(parameters: params, encoding: JSONEncoding.default)
 
         case .runTxtScript(let script):
             return .requestParameters(parameters: ["script": script], encoding: JSONEncoding.default)
@@ -148,17 +150,24 @@ extension BoxJSAPI: TargetType {
 
         // POST — array body
         case .saveData(let params):
-            return .requestCustomJSONEncodable(params, encoder: JSONEncoder())
+            return .requestCustomJSONEncodable(Self.writable(params), encoder: JSONEncoder())
 
         case .linkAppSession(let datas):
-            return .requestCustomJSONEncodable(datas, encoder: JSONEncoder())
+            return .requestCustomJSONEncodable(Self.writable(datas), encoder: JSONEncoder())
 
         // POST — array body + query param
         case .useAppSession(let datas, let appId):
-            let bodyData = (try? JSONEncoder().encode(datas)) ?? Data()
+            let bodyData = (try? JSONEncoder().encode(Self.writable(datas))) ?? Data()
             let encoded = appId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? appId
             return .requestCompositeData(bodyData: bodyData, urlParameters: ["appid": encoded])
         }
+    }
+
+    /// `/api/save` never writes a `null` value: BoxJS treats it as "delete an array
+    /// element" and otherwise does nothing. An unset value is sent as "", which is what
+    /// clears a key (and what the web UI sends).
+    private static func writable(_ datas: [SessionData]) -> [SessionData] {
+        datas.map { $0.val.isNull ? SessionData(key: $0.key, val: "") : $0 }
     }
 
     var headers: [String: String]? {

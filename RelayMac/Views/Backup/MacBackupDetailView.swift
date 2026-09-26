@@ -3,7 +3,6 @@
 //  RelayMac
 //
 
-import AnyCodable
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -18,7 +17,7 @@ struct MacBackupDetailView: View {
     @State private var nameDraft: String = ""
     @State private var showRevertConfirm: Bool = false
     @State private var showDeleteConfirm: Bool = false
-    @State private var remoteBakData: AnyCodable?
+    @State private var remoteBakData: JSONValue?
     @State private var isLoadingBak: Bool = false
     @State private var loadError: String?
 
@@ -35,7 +34,7 @@ struct MacBackupDetailView: View {
     }
 
     /// Remote-fetched data (preferred) falling back to whatever was embedded in the list payload.
-    private var resolvedBak: AnyCodable? {
+    private var resolvedBak: JSONValue? {
         remoteBakData ?? bak?.bak
     }
 
@@ -365,7 +364,7 @@ struct MacBackupDetailView: View {
         loadError = nil
         Task {
             do {
-                let data: AnyCodable = try await NetworkProvider.request(.loadGlobalBak(id: bak.id))
+                let data: JSONValue = try await NetworkProvider.request(.loadGlobalBak(id: bak.id))
                 await MainActor.run {
                     remoteBakData = data
                     isLoadingBak = false
@@ -391,12 +390,8 @@ struct MacBackupDetailView: View {
         let taskID = UUID()
         encodeTaskID = taskID
         Task.detached(priority: .userInitiated) {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let string: String? = {
-                guard let data = try? encoder.encode(payload) else { return nil }
-                return String(data: data, encoding: .utf8)
-            }()
+            let text = payload.prettyJSONText
+            let string: String? = text.isEmpty ? nil : text
             let bytes = string?.utf8.count ?? 0
             await MainActor.run {
                 guard taskID == encodeTaskID else { return }
@@ -409,11 +404,9 @@ struct MacBackupDetailView: View {
 
     // MARK: - Helpers
 
-    private func encode(_ value: AnyCodable) -> String? {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(value) else { return nil }
-        return String(data: data, encoding: .utf8)
+    private func encode(_ value: JSONValue) -> String? {
+        let text = value.prettyJSONText
+        return text.isEmpty ? nil : text
     }
 
     private static let isoFractional: ISO8601DateFormatter = {

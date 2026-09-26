@@ -3,7 +3,6 @@
 //  RelayMac
 //
 
-import AnyCodable
 import AppKit
 import SwiftUI
 
@@ -131,20 +130,10 @@ struct SessionListSection: View {
     }
 
     private func createEmpty() {
-        // Save current app data as a new session
-        let appDatas = boxModel.boxData.datas
-        let relevantKeys = app.keys ?? []
-        let datas: [SessionData]
-        if relevantKeys.isEmpty {
-            datas = appDatas.map { SessionData(key: $0.key, val: $0.value) }
-        } else {
-            datas = relevantKeys.map { key in
-                // appDatas[key] is AnyCodable?? — outer optional means key missing;
-                // flatten to a single AnyCodable? before handing to SessionData.
-                let raw: AnyCodable? = appDatas[key] ?? nil
-                return SessionData(key: key, val: raw)
-            }
-        }
+        // Save the app's own data as a new session, as the web UI and iOS do. An app
+        // without `keys` gets an empty session: snapshotting every stored key would
+        // make applying the session overwrite other apps' data.
+        let datas = boxModel.boxData.loadAppDataInfo(for: app).datas
         boxModel.saveAppSession(app: app, datas: datas)
         toastManager.showToast(message: "已保存当前数据为新会话")
     }

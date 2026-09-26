@@ -3,7 +3,6 @@
 //  RelayMac
 //
 
-import AnyCodable
 import SwiftUI
 
 struct MacDataViewerView: View {
@@ -425,7 +424,7 @@ struct MacDataViewerView: View {
 
     private func rowSubtitle(for key: String, source: KeySource) -> String {
         let owner = keyToOwnerMap[key]
-        let preview = dataPreview(boxModel.boxData.datas[key] ?? nil)
+        let preview = dataPreview(boxModel.boxData.datas[key])
         let truncatedPreview: String? = {
             guard !preview.isEmpty, preview != "null" else { return nil }
             if preview.count > 36 { return String(preview.prefix(36)) + "…" }
@@ -469,26 +468,19 @@ struct MacDataViewerView: View {
         }
     }
 
-    private func applyValue(_ value: AnyCodable?) {
+    private func applyValue(_ value: JSONValue?) {
         guard let value else {
             queryValue = ""
             isValueEditable = true
             return
         }
-        if let string = value.value as? String {
+        if case .string(let string) = value {
             queryValue = string
             isValueEditable = true
             return
         }
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let data = try? encoder.encode(value),
-           let string = String(data: data, encoding: .utf8) {
-            queryValue = string
-        } else {
-            queryValue = String(describing: value.value)
-        }
+        // Stored inside a JSON object (`@key.path`): shown, not edited.
+        queryValue = value.prettyJSONText
         isValueEditable = false
     }
 
@@ -541,17 +533,9 @@ struct MacDataViewerView: View {
         if selectedKey == key { selectedKey = nil }
     }
 
-    private func dataPreview(_ value: AnyCodable?) -> String {
-        guard let value else { return "null" }
-        if let string = value.value as? String {
-            return string.replacingOccurrences(of: "\n", with: " ")
-        }
-        let encoder = JSONEncoder()
-        if let data = try? encoder.encode(value),
-           let string = String(data: data, encoding: .utf8) {
-            return string
-        }
-        return String(describing: value.value)
+    private func dataPreview(_ value: JSONValue?) -> String {
+        guard let value, !value.isNull else { return "null" }
+        return value.displayText.replacingOccurrences(of: "\n", with: " ")
     }
 
     private func deduped(_ keys: [String]) -> [String] {

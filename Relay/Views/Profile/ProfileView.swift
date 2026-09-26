@@ -8,7 +8,6 @@
 import SwiftUI
 import SDWebImageSwiftUI
 import UniformTypeIdentifiers
-import AnyCodable
 import PhotosUI
 import MessageUI
 
@@ -303,10 +302,8 @@ private extension ProfileView {
         toastManager.showLoading(message: "正在加载…")
         Task {
             do {
-                let data: AnyCodable = try await NetworkProvider.request(.loadGlobalBak(id: backup.id))
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                let jsonData = try encoder.encode(data)
+                let data: JSONValue = try await NetworkProvider.request(.loadGlobalBak(id: backup.id))
+                let jsonData = Data(data.prettyJSONText.utf8)
                 // H5 fix: sanitize filename and use try (not try?)
                 let safeName = backup.name.replacingOccurrences(of: "/", with: "_")
                     .replacingOccurrences(of: ":", with: "_")

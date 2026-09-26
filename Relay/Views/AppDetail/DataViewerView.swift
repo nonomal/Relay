@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AnyCodable
 
 // MARK: - Data Key Item
 
@@ -93,7 +92,7 @@ struct DataViewerView: View {
             DataKeyItem(
                 id: key,
                 key: key,
-                valuePreview: dataPreview(boxModel.boxData.datas[key] ?? nil),
+                valuePreview: dataPreview(boxModel.boxData.datas[key]),
                 apps: cachedKeyToAppsMap[key] ?? []
             )
         }
@@ -465,18 +464,12 @@ struct DataViewerView: View {
                 let resp: DataQueryResp = try await NetworkProvider.request(.queryData(key: key))
                 await MainActor.run {
                     if let val = resp.val {
-                        if let str = val.value as? String {
+                        if case .string(let str) = val {
                             queryVal = str
                             isValEditable = true
                         } else {
-                            let encoder = JSONEncoder()
-                            encoder.outputFormatting = .prettyPrinted
-                            if let data = try? encoder.encode(val),
-                               let str = String(data: data, encoding: .utf8) {
-                                queryVal = str
-                            } else {
-                                queryVal = String(describing: val.value)
-                            }
+                            // Stored inside a JSON object (`@key.path`): shown, not edited.
+                            queryVal = val.prettyJSONText
                             isValEditable = false
                         }
                     } else {
@@ -500,7 +493,7 @@ struct DataViewerView: View {
         isSaving = true
 
         var newDatas = boxModel.boxData.datas
-        newDatas[key] = AnyCodable(queryVal)
+        newDatas[key] = .string(queryVal)
         boxModel.boxData = boxModel.boxData.replacingDatas(newDatas)
 
         let val = queryVal
@@ -535,17 +528,9 @@ struct DataViewerView: View {
 
     // MARK: - Helpers
 
-    private func dataPreview(_ val: AnyCodable?) -> String {
-        guard let val = val else { return "null" }
-        if let str = val.value as? String {
-            return str
-        }
-        let encoder = JSONEncoder()
-        if let data = try? encoder.encode(val),
-           let str = String(data: data, encoding: .utf8) {
-            return str
-        }
-        return String(describing: val.value)
+    private func dataPreview(_ val: JSONValue?) -> String {
+        guard let val, !val.isNull else { return "null" }
+        return val.displayText
     }
 }
 

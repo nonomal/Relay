@@ -69,7 +69,7 @@ struct ScriptsSection: View {
                 toastManager.hideLoading()
             }
             do {
-                let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: scriptURL))
+                let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: scriptURL, timeout: script.timeout))
                 if let exception = resp.exception, !exception.isEmpty {
                     toastManager.showToast(message: "执行失败：\(exception)")
                 } else {

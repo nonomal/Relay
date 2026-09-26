@@ -48,12 +48,7 @@ struct SessionRow: View {
 
     private var dataSummary: String {
         let pairs = session.datas.prefix(3).map { d -> String in
-            let val: String
-            if let raw = d.val?.value {
-                val = "\(raw)"
-            } else {
-                val = "—"
-            }
+            let val = d.val.isNull ? "—" : d.val.displayText
             return "\(d.key)=\(val)"
         }
         let more = session.datas.count > 3 ? " …+\(session.datas.count - 3)" : ""

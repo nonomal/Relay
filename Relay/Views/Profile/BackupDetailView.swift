@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AnyCodable
 
 // MARK: - Backup Detail View
 
@@ -18,7 +17,7 @@ struct BackupDetailView: View {
     @Environment(\.presentationMode) var presentationMode
 
     @State private var editedName: String = ""
-    @State private var bakData: AnyCodable? = nil
+    @State private var bakData: JSONValue? = nil
     @State private var isLoadingBak = false
     @State private var exportFileURL: URL? = nil
     @State private var showExportShare = false
@@ -88,13 +87,8 @@ private extension BackupDetailView {
 
     func copyBackupData() {
         if let bak = bakData ?? backup.bak {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            if let data = try? encoder.encode(bak),
-               let str = String(data: data, encoding: .utf8) {
-                copyToClipboard(text: str)
-                toastManager.showToast(message: "已复制备份数据")
-            }
+            copyToClipboard(text: bak.prettyJSONText)
+            toastManager.showToast(message: "已复制备份数据")
         } else {
             toastManager.showToast(message: "备份数据加载中...")
         }
@@ -113,7 +107,7 @@ private extension BackupDetailView {
         isLoadingBak = true
         Task {
             do {
-                let data: AnyCodable = try await NetworkProvider.request(.loadGlobalBak(id: backup.id))
+                let data: JSONValue = try await NetworkProvider.request(.loadGlobalBak(id: backup.id))
                 await MainActor.run {
                     bakData = data
                     isLoadingBak = false
@@ -126,16 +120,12 @@ private extension BackupDetailView {
         }
     }
 
-    func prepareExportFile(from bak: AnyCodable?) {
+    func prepareExportFile(from bak: JSONValue?) {
         guard let bak = bak, exportFileURL == nil else { return }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let data = try? encoder.encode(bak) {
-            let fileName = "\(backup.name)_\(backup.id).json"
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-            try? data.write(to: tempURL)
-            exportFileURL = tempURL
-        }
+        let fileName = "\(backup.name)_\(backup.id).json"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try? Data(bak.prettyJSONText.utf8).write(to: tempURL)
+        exportFileURL = tempURL
     }
 }
 

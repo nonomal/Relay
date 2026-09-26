@@ -26,7 +26,9 @@ struct MacRouteDestination: View {
             }
 
         case .subscription(let url):
-            if let cache = boxModel.boxData.appSubCaches[url] {
+            // Processed like the iOS detail page: shared app ids renamed to match
+            // `boxData.apps`, icons fixed up, text-named options resolved.
+            if let cache = boxModel.boxData.displayAppSubDetail(for: url) {
                 MacSubscribeDetailView(sub: cache)
             } else {
                 ContentUnavailableView(

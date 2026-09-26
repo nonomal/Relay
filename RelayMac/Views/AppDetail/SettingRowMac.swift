@@ -3,22 +3,24 @@
 //  RelayMac
 //
 
-import AnyCodable
 import SwiftUI
 
 struct SettingRowMac: View {
     let setting: Setting
-    @Binding var value: AnyCodable?
+    /// The value in whatever JSON shape BoxJS stored it; read through `JSONValue`'s
+    /// web-faithful coercions.
+    @Binding var value: JSONValue
 
     var body: some View {
-        switch setting.type {
-        case "boolean", "checkbox":
+        switch setting.kind {
+        case .boolean:
             toggleRow
-        case "radios", "radio":
+        case .radios:
             radioPicker
-        case "select", "selects", "modalSelects":
+        case .selects:
             menuPickerRow
-        default:
+        case .text, .textarea, .number, .slider, .colorpicker, .checkboxes:
+            // Checkboxes edit as their stored comma-separated text.
             textRow
         }
     }
@@ -50,6 +52,7 @@ struct SettingRowMac: View {
     private var radioPicker: some View {
         let items: [RadioItem] = setting.items ?? []
         return Picker(selection: stringBinding) {
+            unmatchedOption(in: items)
             ForEach(items) { item in
                 Text(item.label).tag(item.key)
             }
@@ -71,6 +74,7 @@ struct SettingRowMac: View {
                     .foregroundStyle(.secondary)
             } else {
                 Picker("", selection: stringBinding) {
+                    unmatchedOption(in: items)
                     ForEach(items) { item in
                         Text(item.label).tag(item.key)
                     }
@@ -80,6 +84,16 @@ struct SettingRowMac: View {
                 .frame(maxWidth: 280, alignment: .trailing)
                 .help(selectedLabel)
             }
+        }
+    }
+
+    /// A stored value outside the options gets an entry of its own, so the picker never
+    /// holds a selection it cannot show.
+    @ViewBuilder
+    private func unmatchedOption(in items: [RadioItem]) -> some View {
+        let current = stringBinding.wrappedValue
+        if !items.contains(where: { $0.key == current }) {
+            Text(current.isEmpty ? "未选择" : current).tag(current)
         }
     }
 
@@ -96,24 +110,17 @@ struct SettingRowMac: View {
 
     private var stringBinding: Binding<String> {
         Binding {
-            guard let v = value?.value else { return "" }
-            if let s = v as? String { return s }
-            if let n = v as? NSNumber { return n.stringValue }
-            return "\(v)"
+            value.wireText
         } set: { newValue in
-            value = AnyCodable(newValue)
+            value = .string(newValue)
         }
     }
 
     private var boolBinding: Binding<Bool> {
         Binding {
-            guard let v = value?.value else { return false }
-            if let b = v as? Bool { return b }
-            if let s = v as? String { return s == "true" || s == "1" }
-            if let n = v as? NSNumber { return n.boolValue }
-            return false
+            value.boolValue ?? false
         } set: { newValue in
-            value = AnyCodable(newValue)
+            value = .bool(newValue)
         }
     }
 }

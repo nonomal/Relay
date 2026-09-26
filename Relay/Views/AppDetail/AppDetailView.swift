@@ -8,7 +8,6 @@
 import SwiftUI
 import UIKit
 import WebKit
-import AnyCodable
 import SDWebImageSwiftUI
 import UniformTypeIdentifiers
 
@@ -238,7 +237,7 @@ struct AppDescCardView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let descs = app?.descs {
-                    ForEach(descs, id: \.self) { desc in
+                    ForEach(Array(descs.enumerated()), id: \.offset) { _, desc in
                         Text(desc)
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
@@ -274,7 +273,7 @@ struct AppScriptsView: View {
     }
 
     var body: some View {
-        ForEach(Array(scripts.enumerated()), id: \.element.script) { index, script in
+        ForEach(Array(scripts.enumerated()), id: \.offset) { index, script in
             if index > 0 { DetailRowDivider() }
             scriptRow(script)
         }
@@ -339,7 +338,7 @@ struct AppScriptsView: View {
     private func run(_ script: RunScript) async {
         loadingScript = script.script
         do {
-            let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: script.script))
+            let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: script.script, timeout: script.timeout))
             lastRun[script.script] = ScriptRunState(
                 succeeded: resp.exception?.isEmpty ?? true,
                 at: Date()
@@ -362,71 +361,66 @@ struct FormSettingRow: View {
     let index: Int
     @Binding var settings: [Setting]
 
+    // Values arrive in whatever JSON shape BoxJS returned — a number typed into a
+    // text field, `"true"` for a switch, `"a,b"` for checkboxes — so every binding
+    // reads through `JSONValue`'s coercions, which follow the web UI.
+
     private func binding(for index: Int) -> Binding<String> {
         Binding<String>(
-            get: { (settings[index].val?.value as? String) ?? "" },
-            set: { settings[index].val = AnyCodable($0) }
+            get: { settings[index].val.wireText },
+            set: { settings[index].val = .string($0) }
         )
     }
 
     private func boolBinding(for index: Int) -> Binding<Bool> {
         Binding<Bool>(
-            get: { (settings[index].val?.value as? Bool) ?? false },
-            set: { settings[index].val = AnyCodable($0) }
+            get: { settings[index].val.boolValue ?? false },
+            set: { settings[index].val = .bool($0) }
         )
     }
 
     private func doubleBinding(for index: Int) -> Binding<Double> {
         Binding<Double>(
-            get: {
-                if let val = settings[index].val?.value {
-                    if let d = val as? Double { return d }
-                    if let n = val as? Int { return Double(n) }
-                    if let s = val as? String, let d = Double(s) { return d }
-                }
-                return 0
-            },
-            set: { settings[index].val = AnyCodable($0) }
+            get: { settings[index].val.numberValue ?? 0 },
+            set: { settings[index].val = .number($0) }
         )
     }
 
     private func colorBinding(for index: Int) -> Binding<Color> {
         Binding<Color>(
             get: {
-                if let hex = settings[index].val?.value as? String, !hex.isEmpty {
+                if let hex = settings[index].val.scalarText, !hex.isEmpty {
                     return Color(hex: hex)
                 }
                 return .blue
             },
-            set: { settings[index].val = AnyCodable($0.toHex()) }
+            set: { settings[index].val = .string($0.toHex()) }
         )
     }
 
     private func arrayBinding(for index: Int) -> Binding<[String]> {
         Binding<[String]>(
-            get: { (settings[index].val?.value as? [String]) ?? [] },
-            set: { settings[index].val = AnyCodable($0) }
+            get: { settings[index].val.listItems },
+            set: { settings[index].val = .array($0.map(JSONValue.string)) }
         )
     }
 
-    private func pickerBinding(for index: Int, items: [RadioItem]) -> Binding<String> {
+    /// The stored choice as-is. A value matching no option selects nothing, as in the
+    /// web UI, rather than pretending the first option is chosen.
+    private func pickerBinding(for index: Int) -> Binding<String> {
         Binding<String>(
-            get: {
-                let current = (settings[index].val?.value as? String) ?? ""
-                if items.contains(where: { $0.key == current }) { return current }
-                return items.first?.key ?? ""
-            },
-            set: { settings[index].val = AnyCodable($0) }
+            get: { settings[index].val.scalarText ?? "" },
+            set: { settings[index].val = .string($0) }
         )
     }
 
     private var title: String { setting.name ?? setting.id }
 
     var body: some View {
-        switch setting.type {
+        switch setting.kind {
         // Option lists own their whole row — the label sits above the card-style options.
-        case "radios", "checkboxes":
-            optionGroup(isMultiSelect: setting.type == "checkboxes")
+        case .radios, .checkboxes:
+            optionGroup(isMultiSelect: setting.kind == .checkboxes)
 
         default:
             DetailSettingRow(title: title, desc: setting.desc) {
@@ -483,7 +477,7 @@ struct FormSettingRow: View {
                     }
                 }
             } else {
-                let selected = pickerBinding(for: index, items: items)
+                let selected = pickerBinding(for: index)
                 ForEach(Array(items.enumerated()), id: \.element.key) { i, item in
                     if i > 0 { DetailRowDivider() }
                     DetailOptionRow(
@@ -502,15 +496,15 @@ struct FormSettingRow: View {
 
     @ViewBuilder
     private var settingControl: some View {
-        switch setting.type {
-        case "boolean":
+        switch setting.kind {
+        case .boolean:
             DetailInlineLabel(title: title) {
                 Toggle("", isOn: boolBinding(for: index))
                     .labelsHidden()
                     .tint(.green)
             }
 
-        case "textarea":
+        case .textarea:
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 14.5, weight: .medium))
@@ -522,15 +516,20 @@ struct FormSettingRow: View {
                 )
             }
 
-        case "selects", "modalSelects":
+        case .selects:
             let items = setting.items ?? []
             DetailInlineLabel(title: title) {
                 if items.isEmpty {
                     Text("—").foregroundColor(.textTertiary)
                 } else {
-                    let selection = pickerBinding(for: index, items: items)
+                    let selection = pickerBinding(for: index)
                     Menu {
                         Picker("", selection: selection) {
+                            // A stored value outside the options gets an entry of its
+                            // own, so the picker never holds a selection it cannot show.
+                            if !items.contains(where: { $0.key == selection.wrappedValue }) {
+                                Text(selection.wrappedValue.nilIfEmpty ?? "未选择").tag(selection.wrappedValue)
+                            }
                             ForEach(items) { item in
                                 Text(item.label).tag(item.key)
                             }
@@ -538,25 +537,26 @@ struct FormSettingRow: View {
                     } label: {
                         DetailPillLabel(
                             text: items.first { $0.key == selection.wrappedValue }?.label
-                                ?? selection.wrappedValue
+                                ?? selection.wrappedValue.nilIfEmpty
+                                ?? "未选择"
                         )
                     }
                 }
             }
 
-        case "slider":
+        case .slider:
             VStack(alignment: .leading, spacing: 4) {
                 DetailInlineLabel(title: title) {
-                    Text(String(format: "%.0f", doubleBinding(for: index).wrappedValue))
+                    Text(JSONValue.format(doubleBinding(for: index).wrappedValue))
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
                         .foregroundColor(.accent)
                 }
-                Slider(value: doubleBinding(for: index), in: 0...100, step: 1)
+                Slider(value: doubleBinding(for: index), in: setting.sliderRange, step: setting.sliderStep)
                     .tint(.accent)
             }
 
-        case "colorpicker":
+        case .colorpicker:
             let color = colorBinding(for: index)
             DetailInlineLabel(title: title) {
                 HStack(spacing: 7) {
@@ -570,12 +570,12 @@ struct FormSettingRow: View {
                 }
             }
 
-        case "number":
+        case .number:
             DetailInlineLabel(title: title) {
                 DetailStepper(value: doubleBinding(for: index))
             }
 
-        default:
+        case .text, .radios, .checkboxes:
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.system(size: 14.5, weight: .medium))
@@ -619,7 +619,7 @@ struct AppDetailView: View {
 
     /// Snapshot of setting values taken on appear. Diffing against it drives both the
     /// save button's state and the "已修改" filter, and lets saves skip untouched keys.
-    @State private var originalValues: [String: String] = [:]
+    @State private var originalValues: [String: JSONValue] = [:]
     @State private var settingsQuery = ""
     @State private var settingsFilter: SettingsFilter = .all
     /// Row membership captured when a filter is selected, so editing a visible row
@@ -639,7 +639,7 @@ struct AppDetailView: View {
     private var modifiedSettingIds: Set<String> {
         guard !originalValues.isEmpty else { return [] }
         return Set((app?.settings ?? [])
-            .filter { originalValues[$0.id] != Self.comparableValue($0.val) }
+            .filter { originalValues[$0.id]?.wireText != $0.val.wireText }
             .map(\.id))
     }
 
@@ -648,7 +648,7 @@ struct AppDetailView: View {
     /// label, the group's revert action), and only the yes/no answer is needed.
     private var hasUnsavedChanges: Bool {
         guard !originalValues.isEmpty else { return false }
-        return (app?.settings ?? []).contains { originalValues[$0.id] != Self.comparableValue($0.val) }
+        return (app?.settings ?? []).contains { originalValues[$0.id]?.wireText != $0.val.wireText }
     }
 
     var body: some View {
@@ -901,7 +901,7 @@ struct AppDetailView: View {
             switch filter {
             case .all: return nil
             case .modified: return modified.count
-            case .empty: return settings.filter { Self.isEmptyValue($0.val) }.count
+            case .empty: return settings.filter { $0.val.wireText.isEmpty }.count
             }
         }()
 
@@ -961,8 +961,10 @@ struct AppDetailView: View {
     private func revertSettings() {
         guard var settings = app?.settings else { return }
         for index in settings.indices {
+            // Restores the value itself, not its text: a switch reverted to `"true"`
+            // text would read as off, and checkboxes as nothing selected.
             if let original = originalValues[settings[index].id] {
-                settings[index].val = original.isEmpty ? AnyCodable(nil) : AnyCodable(original)
+                settings[index].val = original
             }
         }
         app?.settings = settings
@@ -973,31 +975,9 @@ struct AppDetailView: View {
         // Only snapshot once per visit; re-capturing would erase pending edits.
         guard originalValues.isEmpty, let settings = app?.settings, !settings.isEmpty else { return }
         originalValues = Dictionary(
-            settings.map { ($0.id, Self.comparableValue($0.val)) },
+            settings.map { ($0.id, $0.val) },
             uniquingKeysWith: { first, _ in first }
         )
-    }
-
-    /// Stable string form used for diffing — AnyCodable is not Equatable.
-    /// `JSONEncoder` is comparatively expensive to build; `comparableValue` runs once
-    /// per setting per diff, so it must not allocate one each time.
-    private static let comparisonEncoder = JSONEncoder()
-
-    private static func comparableValue(_ val: AnyCodable?) -> String {
-        guard let value = val?.value else { return "" }
-        if value is NSNull { return "" }
-        if let s = value as? String { return s }
-        if let b = value as? Bool { return b ? "true" : "false" }
-        if let arr = value as? [String] { return arr.joined(separator: ",") }
-        if let encoded = try? Self.comparisonEncoder.encode(AnyCodable(value)),
-           let str = String(data: encoded, encoding: .utf8) {
-            return str
-        }
-        return String(describing: value)
-    }
-
-    private static func isEmptyValue(_ val: AnyCodable?) -> Bool {
-        comparableValue(val).isEmpty
     }
 
     private static func membership(
@@ -1008,7 +988,7 @@ struct AppDetailView: View {
         switch filter {
         case .all:      return Set(settings.map(\.id))
         case .modified: return modified
-        case .empty:    return Set(settings.filter { isEmptyValue($0.val) }.map(\.id))
+        case .empty:    return Set(settings.filter { $0.val.wireText.isEmpty }.map(\.id))
         }
     }
 
@@ -1290,29 +1270,18 @@ struct AppDetailView: View {
             return
         }
 
-        boxModel.saveData(params: payload.map { setting in
-            let transformedVal: AnyCodable = {
-                if setting.type == "checkboxes", let arrayVal = setting.val?.value as? [String] {
-                    return AnyCodable(arrayVal.joined(separator: ","))
-                } else if let val = setting.val {
-                    return val
-                } else {
-                    return AnyCodable(nil)
-                }
-            }()
-            return SessionData(key: setting.id, val: transformedVal)
-        })
+        boxModel.saveSettings(payload)
 
         // Saved values become the new baseline, returning the button to its clean state.
         for setting in payload {
-            originalValues[setting.id] = Self.comparableValue(setting.val)
+            originalValues[setting.id] = setting.val
         }
         toastManager.showToast(message: "保存成功!")
     }
 
     private func runAppScript(_ script: String) async {
         do {
-            let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: script))
+            let resp: ScriptResp = try await NetworkProvider.request(.runScript(url: script, timeout: app?.scriptTimeout))
             scriptResult = resp
             showScriptResult = true
             boxModel.fetchData()
@@ -1355,25 +1324,16 @@ struct AppDetailView: View {
     }
 
     private func copySession(_ session: Session) {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let data = try? encoder.encode(session),
-           let str = String(data: data, encoding: .utf8) {
-            copyToClipboard(text: str)
-            toastManager.showToast(message: "已复制会话")
-        }
+        copyToClipboard(text: session.jsonValue.prettyJSONText)
+        toastManager.showToast(message: "已复制会话")
     }
 
+    /// Same shape as the web UI's copy: `{ key: value }` with values in their stored types.
     private func copyAppDatas() {
-        var result: [String: String] = [:]
-        for data in cachedAppDataInfo.datas {
-            result[data.key] = SessionValueFormatter.string(data.val)
-        }
-        if let jsonData = try? JSONSerialization.data(withJSONObject: result),
-           let str = String(data: jsonData, encoding: .utf8) {
-            copyToClipboard(text: str)
-            toastManager.showToast(message: "已复制数据")
-        }
+        let result = Dictionary(cachedAppDataInfo.datas.map { ($0.key, $0.val) },
+                                uniquingKeysWith: { first, _ in first })
+        copyToClipboard(text: JSONValue.object(result).compactJSONText)
+        toastManager.showToast(message: "已复制数据")
     }
 
 }
