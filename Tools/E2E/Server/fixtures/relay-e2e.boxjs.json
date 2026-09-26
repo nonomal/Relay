@@ -1,0 +1,86 @@
+{
+  "id": "relay.e2e",
+  "name": "Relay E2E 订阅",
+  "author": "@e2e",
+  "icon": "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+  "repo": "https://example.com/relay-e2e",
+  "apps": [
+    {
+      "id": "e2e.settings",
+      "name": "E2E 设置",
+      "author": "@e2e",
+      "icons": [
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png"
+      ],
+      "keys": [
+        "e2e_cookie",
+        "e2e_unset",
+        "e2e_options"
+      ],
+      "scripts": [
+        {
+          "script": "https://example.com/relay-e2e/run.js"
+        }
+      ],
+      "settings": [
+        {
+          "id": "e2e_text",
+          "name": "文本数字值",
+          "type": "text",
+          "val": 2000
+        },
+        {
+          "id": "e2e_bool",
+          "name": "字符串开关",
+          "type": "boolean",
+          "val": "true"
+        },
+        {
+          "id": "e2e_radio",
+          "name": "数字键单选",
+          "type": "radios",
+          "val": 2,
+          "items": [
+            {
+              "key": 1,
+              "label": "选项一"
+            },
+            {
+              "key": 2,
+              "label": "选项二"
+            }
+          ]
+        },
+        {
+          "id": "e2e_select",
+          "name": "引用下拉",
+          "type": "selects",
+          "val": "y",
+          "items": "e2e_options"
+        },
+        {
+          "id": "e2e_number",
+          "name": "文本数字",
+          "type": "number",
+          "val": "3"
+        },
+        {
+          "id": "e2e_misc",
+          "name": 7,
+          "desc": [
+            "第一行说明",
+            "第二行说明"
+          ],
+          "type": "texearea",
+          "val": null
+        }
+      ]
+    },
+    {
+      "id": 12345,
+      "name": "数字ID应用",
+      "icons": "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "id": "relay.e2e.plain",
+  "name": "E2E 常规订阅",
+  "author": "@e2e",
+  "icon": "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+  "repo": "https://example.com/relay-e2e",
+  "apps": [
+    {
+      "id": "e2e.plain.one",
+      "name": "常规应用一",
+      "author": "@e2e",
+      "icons": [
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png"
+      ],
+      "keys": [
+        "e2e_plain_one"
+      ],
+      "settings": [
+        {
+          "id": "e2e_plain_enabled",
+          "name": "启用",
+          "type": "boolean",
+          "val": true
+        }
+      ]
+    },
+    {
+      "id": "e2e.plain.two",
+      "name": "常规应用二",
+      "author": "@e2e",
+      "icons": [
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png"
+      ],
+      "keys": [
+        "e2e_plain_two"
+      ]
+    }
+  ]
+}

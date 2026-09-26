@@ -17,6 +17,10 @@ xcodebuild -project Relay.xcodeproj -scheme Relay -sdk iphonesimulator -destinat
 
 # Model-layer tests (Foundation-only, plain swiftc — no simulator or test target)
 Tools/ModelTests/run.sh            # optionally: run.sh <dir of saved /query/boxdata JSON>
+
+# End-to-end UI tests on an existing iPhone simulator, against the real BoxJS backend script
+# (needs Node 18+ and chavyleung/scripts checked out next to this repo, or BOXJS_SCRIPT=…)
+Tools/E2E/run.sh                   # RELAY_E2E_DEVICE=<udid> to pick the simulator
 ```
 
 - **Xcode 15.4+**, **iOS 15.0+**, **Swift 5.0**

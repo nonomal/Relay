@@ -1,0 +1,36 @@
+﻿{
+  "id": "relay.e2e.bom",
+  "name": "E2E BOM 订阅",
+  "author": "@e2e",
+  "icon": "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+  "repo": "https://example.com/relay-e2e",
+  "apps": [
+    {
+      "id": "e2e.bom.1",
+      "name": "BOM 应用1",
+      "author": "@e2e",
+      "icons": [
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png"
+      ]
+    },
+    {
+      "id": "e2e.bom.2",
+      "name": "BOM 应用2",
+      "author": "@e2e",
+      "icons": [
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png"
+      ]
+    },
+    {
+      "id": "e2e.bom.3",
+      "name": "BOM 应用3",
+      "author": "@e2e",
+      "icons": [
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png",
+        "https://raw.githubusercontent.com/chavyleung/scripts/master/box/icons/BoxSetting.png"
+      ]
+    }
+  ]
+}
